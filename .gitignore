@@ -1,0 +1,6 @@
+# ignore node installed modules
+node_modules
+dist
+lib
+
+
