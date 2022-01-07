@@ -8,6 +8,7 @@
     },
     "files": [
         "util.ts",
-        "deferred.ts"
+        "deferred.ts",
+        "crypto.ts"
     ]
 }

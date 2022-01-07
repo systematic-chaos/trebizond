@@ -19,11 +19,14 @@
   "license": "MIT",
   "devDependencies": {
     "@types/bluebird": "^3.5.24",
+    "@types/crypto-js": "^3.1.43",
     "@types/node": "^8.5.1",
     "types": "^0.1.1",
     "typescript": "^2.6.2"
   },
   "dependencies": {
-    "bluebird": "^3.5.2"
+    "bluebird": "^3.5.2",
+    "crypto-js": "^3.1.9-1",
+    "tweetnacl-util": "^0.15.0"
   }
 }
