@@ -7,8 +7,5 @@
         "strict": true
     },
     "files": [
-        "util.ts",
-        "deferred.ts",
-        "crypto.ts"
     ]
 }

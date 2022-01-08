@@ -1,3 +1,16 @@
+/**
+ * Trebizond - Byzantine consensus algorithm for permissioned blockchain systems
+ * 
+ * Byzantine Consensus and Blockchain
+ * Master Degree in Parallel and Distributed Computing
+ * Polytechnic University of Valencia
+ * 
+ * Javier Fernández-Bravo Peñuela
+ * 
+ * crypto.ts
+ * 
+ */
+
 import sha2 = require('crypto-js/sha256');
 import aes = require('crypto-js/aes');
 import utf8 = require('crypto-js/enc-utf8');
@@ -29,7 +42,7 @@ export function signBytes(bytes: Uint8Array, key: string): SignedBytes {
     };
 }
 
-export function signObject(object: Object, key: string): SignedObject {
+export function signObject(object: Object, key: string): SignedObject<Object> {
     return {
         value: object,
         signature: generateSignedDigestFromObject(object, key)
@@ -44,7 +57,7 @@ export function checkBytesSignature(signedbytes: SignedBytes, key: string): bool
     return hashBytes(signedbytes.value) == decryptText(signedbytes.signature, key);
 }
 
-export function checkObjectSignature(signedobject: SignedObject, key: string): boolean {
+export function checkObjectSignature(signedobject: SignedObject<Object>, key: string): boolean {
     return hashObject(signedobject.value) == decryptText(signedobject.signature, key);
 }
 
@@ -60,8 +73,8 @@ export interface SignedBytes extends Signed {
     value: Uint8Array;
 }
 
-export interface SignedObject extends Signed {
-    value: Object;
+export interface SignedObject<O extends Object> extends Signed {
+    value: O;
 }
 
 export function encryptText(text: string, key: string): Uint8Array {
@@ -128,7 +141,7 @@ export class Cipher {
         return signBytes(bytes, this.key);
     }
 
-    public signObject(object: Object): SignedObject {
+    public signObject(object: Object): SignedObject<Object> {
         return signObject(object, this.key);
     }
 

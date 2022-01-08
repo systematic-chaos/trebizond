@@ -7,5 +7,9 @@
         "strict": true
     },
     "files": [
+        "datatypes.ts",
+        "util.ts",
+        "crypto.ts",
+        "deferred.ts"
     ]
 }

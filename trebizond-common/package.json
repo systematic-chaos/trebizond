@@ -1,7 +1,7 @@
 {
-  "name": "trebizond-datatypes",
+  "name": "trebizond-common",
   "version": "1.0.0",
-  "description": "Trebizond datatypes",
+  "description": "Trebizond common",
   "main": "index.js",
   "scripts": {
     "build": "tsc",
@@ -14,14 +14,20 @@
   "keywords": [
     "trebizond",
     "data",
-    "types"
+    "types",
+    "common",
+    "utilities"
   ],
   "author": "Javier Fernández-Bravo Peñuela <fraferp9@posgrado.upv.es>",
   "license": "MIT",
   "devDependencies": {
+    "@types/crypto-js": "^3.1.43",
     "@types/node": "^8.5.1",
     "types": "^0.1.1",
     "typescript": "^2.6.2"
   },
-  "dependencies": {}
+  "dependencies": {
+    "crypto-js": "^3.1.9-1",
+    "tweetnacl-util": "^0.15.0"
+  }
 }
