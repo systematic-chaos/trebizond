@@ -18,6 +18,7 @@
   "author": "Javier Fernández-Bravo Peñuela <fraferp9@posgrado.upv.es>",
   "license": "MIT",
   "devDependencies": {
+    "@types/ioredis": "^3.2.5",
     "@types/node": "^8.5.1",
     "@types/zeromq": "^4.5.3",
     "types": "^0.1.1",
@@ -25,6 +26,7 @@
   },
   "dependencies": {
     "dns": "^0.2.2",
+    "ioredis": "^3.2.2",
     "zeromq": "^4.6.0"
   }
 }
