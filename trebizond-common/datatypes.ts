@@ -17,6 +17,13 @@ export interface Message {
     from: number;
 }
 
+export interface Envelope<M extends Message> {
+    ids: string[];
+    type: string;
+    serialUUID: string;
+    msg: M;
+}
+
 /* These abstract classes implementation is provided by the platform *
  * onto which the consensus algorithm is integrated.                 */
 export abstract class Operation {
@@ -86,4 +93,8 @@ export interface Echo<Op extends Operation> extends OpMessage<Op> {
 export interface Ready<Op extends Operation> extends OpMessage<Op> {
     type: 'Ready';
     currentStatus: Uint8Array; // status digest
+}
+
+export interface Reply extends Message {
+    serialUUID?: string;
 }

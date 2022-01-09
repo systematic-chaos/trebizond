@@ -13,7 +13,7 @@
 import { Operation,
          Result } from '../trebizond-common/datatypes';
 import { StateMachine } from '../state-machine-connector/command';
-import { Deferred } from '../trebizond-common/deferred';
+import { Deferred as QPromise } from '../trebizond-common/deferred';
 import { convertMapToArray,
          convertObjectToArray } from '../trebizond-common/util';
 import * as Redis from 'ioredis';
@@ -69,7 +69,7 @@ export class RedisStateMachine extends StateMachine<RedisOperation, RedisResult>
     }
 
     public async executeOperation(op: RedisOperation): Promise<RedisResult> {
-        var p = new Deferred<RedisResult>();
+        var p = new QPromise<RedisResult>();
         var newValue: number;
         if (op.operator == RedisOperator.assign) {
             newValue = op.value;
@@ -108,7 +108,7 @@ export class RedisStateMachine extends StateMachine<RedisOperation, RedisResult>
     }
     
     public async getSnapshot(): Promise<Map<string, number>> {
-        var p = new Deferred<Map<string, number>>();
+        var p = new QPromise<Map<string, number>>();
         this.redis.hgetall('*', (err: Error, result: any) => {
             if (err !== null && err !== undefined
                 && (result === null || result === undefined)) {

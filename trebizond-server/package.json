@@ -19,8 +19,12 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^8.5.1",
+    "@types/zeromq": "^4.5.3",
     "types": "^0.1.1",
     "typescript": "^2.6.2"
   },
-  "dependencies": {}
+  "dependencies": {
+    "dns": "^0.2.2",
+    "zeromq": "^4.6.0"
+  }
 }
