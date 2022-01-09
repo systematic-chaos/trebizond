@@ -7,7 +7,7 @@
  * 
  * Javier Fernández-Bravo Peñuela
  * 
- * trebizond-client/util.ts
+ * trebizond-common/util.ts
  */
 
 export function uuidv4() {

@@ -7,8 +7,7 @@
  * 
  * Javier Fernández-Bravo Peñuela
  * 
- * crypto.ts
- * 
+ * trebizond-common/crypto.ts
  */
 
 import sha2 = require('crypto-js/sha256');
@@ -24,8 +23,8 @@ export function generateSignedDigestFromBytes(bytes: Uint8Array, key: string): U
     return encryptText(hashBytes(bytes), key);
 }
 
-export function generateSignedDigestFromObject(object: Object, key: string): Uint8Array {
-    return encryptText(hashObject(object), key);
+export function generateSignedDigestFromObject(obj: object, key: string): Uint8Array {
+    return encryptText(hashObject(obj), key);
 }
 
 export function signText(text: string, key: string): SignedText {
@@ -42,10 +41,10 @@ export function signBytes(bytes: Uint8Array, key: string): SignedBytes {
     };
 }
 
-export function signObject(object: Object, key: string): SignedObject<Object> {
+export function signObject(obj: object, key: string): SignedObject<object> {
     return {
-        value: object,
-        signature: generateSignedDigestFromObject(object, key)
+        value: obj,
+        signature: generateSignedDigestFromObject(obj, key)
     };
 }
 
@@ -57,7 +56,7 @@ export function checkBytesSignature(signedbytes: SignedBytes, key: string): bool
     return hashBytes(signedbytes.value) == decryptText(signedbytes.signature, key);
 }
 
-export function checkObjectSignature(signedobject: SignedObject<Object>, key: string): boolean {
+export function checkObjectSignature(signedobject: SignedObject<object>, key: string): boolean {
     return hashObject(signedobject.value) == decryptText(signedobject.signature, key);
 }
 
@@ -73,7 +72,7 @@ export interface SignedBytes extends Signed {
     value: Uint8Array;
 }
 
-export interface SignedObject<O extends Object> extends Signed {
+export interface SignedObject<O extends object> extends Signed {
     value: O;
 }
 
@@ -85,8 +84,8 @@ export function encryptBytes(bytes: Uint8Array, key: string): Uint8Array {
     return nacl.decodeUTF8(aes.encrypt(nacl.encodeUTF8(bytes), key).toString());
 }
 
-export function encryptObject(object: Object, key: string): Uint8Array {
-    return nacl.decodeUTF8(aes.encrypt(JSON.stringify(object), key).toString());
+export function encryptObject(obj: object, key: string): Uint8Array {
+    return nacl.decodeUTF8(aes.encrypt(JSON.stringify(obj), key).toString());
 }
 
 export function decryptText(cipherbytes: Uint8Array, key: string): string {
@@ -97,7 +96,7 @@ export function decryptBytes(cipherbytes: Uint8Array, key: string): Uint8Array {
     return nacl.decodeUTF8(aes.decrypt(nacl.encodeUTF8(cipherbytes), key).toString(utf8));
 }
 
-export function decryptObject(cipherbytes: Uint8Array, key: string): Object {
+export function decryptObject(cipherbytes: Uint8Array, key: string): object {
     return JSON.parse(aes.decrypt(nacl.encodeUTF8(cipherbytes), key).toString(utf8));
 }
 
@@ -109,8 +108,8 @@ export function hashBytes(bytes: Uint8Array): string {
     return sha2(nacl.encodeUTF8(bytes)).toString();
 }
 
-export function hashObject(object: Object): string {
-    return sha2(JSON.stringify(object)).toString();
+export function hashObject(obj: object): string {
+    return sha2(JSON.stringify(obj)).toString();
 }
 
 export class Cipher {
@@ -129,8 +128,8 @@ export class Cipher {
         return generateSignedDigestFromBytes(bytes, this.key);
     }
 
-    public generateSignedDigestFromObject(object: Object, key: string): Uint8Array {
-        return generateSignedDigestFromObject(object, this.key);
+    public generateSignedDigestFromObject(obj: object, key: string): Uint8Array {
+        return generateSignedDigestFromObject(obj, this.key);
     }
 
     public signText(text: string): SignedText {
@@ -141,8 +140,8 @@ export class Cipher {
         return signBytes(bytes, this.key);
     }
 
-    public signObject(object: Object): SignedObject<Object> {
-        return signObject(object, this.key);
+    public signObject(obj: object): SignedObject<object> {
+        return signObject(obj, this.key);
     }
 
     public decryptText(cipherbytes: Uint8Array): string {
@@ -153,7 +152,7 @@ export class Cipher {
         return decryptBytes(cipherbytes, this.key);
     }
 
-    public decryptObject(cipherbytes: Uint8Array): Object {
+    public decryptObject(cipherbytes: Uint8Array): object {
         return decryptObject(cipherbytes, this.key);
     }
 }

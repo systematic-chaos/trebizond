@@ -7,11 +7,13 @@
  * 
  * Javier Fernández-Bravo Peñuela
  * 
- * trebizond-client/deferred.ts
+ * trebizond-common/deferred.ts
  * 
  * @see http://romkevandermeulen.nl/2016/09/18/deferred-typescript.html
  * @see https://github.com/domenic/promises-unwrapping/blob/master/docs/states-and-fates.md
  */
+
+import * as Promise from 'bluebird';
 
 export class Deferred<T> {
     public promise: Promise<T>;

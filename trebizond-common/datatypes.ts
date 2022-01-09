@@ -1,5 +1,3 @@
-import { SignedBytes } from "./crypto";
-
 /**
  * Trebizond - Byzantine consensus algorithm for permissioned blockchain systems
  * 
@@ -9,12 +7,14 @@ import { SignedBytes } from "./crypto";
  * 
  * Javier Fernández-Bravo Peñuela
  * 
- * trebizond-datatypes/datatypes.ts
- * 
+ * trebizond-common/datatypes.ts
  */
+
+import { SignedBytes } from './crypto';
 
 export interface Message {
     type: string;
+    from: number;
 }
 
 /* These abstract classes implementation is provided by the platform *
@@ -25,15 +25,14 @@ export abstract class Operation {
 export abstract class Result {
 }
 
-export interface TrebizondOperation {
-    op: Operation;
+export interface TrebizondOperation<Op extends Operation> {
+    operation: Op;
     uuid: string;
     timestamp: Date;
 }
 
-export interface OpMessage extends Message {
-    operation: TrebizondOperation;
-    source: number;
+export interface OpMessage<Op extends Operation> extends Message {
+    operation: TrebizondOperation<Op>;
 }
 
 export interface LeadershipVote extends Message {
@@ -48,38 +47,43 @@ export interface LeaderConfirmation extends Message {
     votes: Array<SignedBytes>; // Other replicas' leadership votes hashes
 }
 
-export interface OperationRequest extends OpMessage {
+export interface OperationRequest<Op extends Operation> extends OpMessage<Op> {
     type: 'OperationRequest';
     origen: number;
     broadcast: boolean;
 }
 
-export interface TrebizondResult {
-    result: Result;
+export interface TrebizondResult<R extends Result> {
+    result: R;
     opUuid: string;
 }
 
-export interface SingleReply {
-    result: TrebizondResult;
+export interface SingleReply<R extends Result> extends Message {
+    type: 'SingleReply';
+    result: TrebizondResult<R>;
 }
 
-export interface CollectiveReply extends SingleReply {
+export interface CollectiveReply<R extends Result> extends Message {
+    type: 'CollectiveReply';
+    result: TrebizondResult<R>;
     resultAcknowledgments: Array<SignedBytes>; // Other replicas' results hashes
 }
 
-export type Accusation = OpMessage;
+export interface Accusation extends Message {
+    type: 'Accusation';
+}
 
-export interface Init extends OpMessage {
+export interface Init<Op extends Operation> extends OpMessage<Op> {
     type: 'Init';
     currentStatus: Uint8Array; // status digest
 }
 
-export interface Echo extends OpMessage {
+export interface Echo<Op extends Operation> extends OpMessage<Op> {
     type: 'Echo';
     currentStatus: Uint8Array; // status digest
 }
 
-export interface Ready extends OpMessage {
+export interface Ready<Op extends Operation> extends OpMessage<Op> {
     type: 'Ready';
     currentStatus: Uint8Array; // status digest
 }
