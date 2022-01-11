@@ -7,6 +7,7 @@
         "strict": true
     },
     "files": [
-        "redisCommand.ts"
+        "redisCommand.ts",
+        "redisMessageValidator.ts"
     ]
 }

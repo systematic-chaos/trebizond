@@ -13,6 +13,9 @@
 import { Message,
          Envelope,
          Reply } from '../trebizond-common/datatypes';
+import { checkObjectSignature,
+         signObject,
+         SignedObject } from '../trebizond-common/crypto';
 import { Deferred as QPromise } from '../trebizond-common/deferred';
 import { uuidv4 } from '../trebizond-common/util';
 import { networkInterfaces } from 'os';
@@ -53,12 +56,12 @@ export abstract class NetworkController {
      * @returns The marshalled representation of a message, apt for
      *              its sending by means of a ZeroMQ socket
      */
-    marshallMessage(msg: Message, from: number, to?: number, uuid: string = uuidv4()): string[] {
+    marshallMessage(msg: SignedObject<Message>, from: number, to?: number, uuid: string = uuidv4()): string[] {
         var marshall: Array<string> = [];
         marshall.push('');
         marshall.push(from.toString());
         marshall.push(to != null ? to.toString(): '');
-        marshall.push(msg.type);
+        marshall.push(msg.value.type);
         marshall.push(uuid);
         marshall.push(JSON.stringify(msg));
         return marshall;
@@ -72,7 +75,7 @@ export abstract class NetworkController {
      *              contains data related to its delivery
      */
     unmarshallMessage(marshall: string[]): Envelope<Message> {
-        var msg: Message;
+        var msg: SignedObject<Message>;
         var ids: Array<string> = [];
         var msgType: string;
         var uuid: string;
@@ -86,12 +89,13 @@ export abstract class NetworkController {
         msgType = marshall[++n].toString();
         uuid = marshall[++n].toString();
         msg = JSON.parse(marshall[++n].toString());
-        return {
+        var envelope: Envelope<Message> = {
             ids: ids,
             type: msgType,
             serialUUID: uuid,
             msg: msg
         };
+        return envelope;
     }
 
     protected static readonly TRANSPORT_PROTOCOL: string = 'tcp';
@@ -135,10 +139,21 @@ export class ServerNetworkController extends NetworkController {
     protected topologyPeers: Map<number, string>;
 
     /**
+     * other peers public keys, for checking digital signatures
+     */
+    protected peerKeys: Map<number, string>;
+
+    /**
+     * clients public keys, for checking digital signatures
+     */
+    protected clientKeys: Map<number, string>;
+
+    /**
      * function provided by the server instantiating this controller,
      * to be called when a request message from another server is received
      */
-    protected onMessageCallback: (message: Envelope<Message>) => void|any;
+    protected onMessageCallback!: (message: Envelope<Message>) => void|any;
+    protected onRequestCallback!: (request: string[]) => void|any;
 
     /**
      * NetworkController class constructor
@@ -154,13 +169,17 @@ export class ServerNetworkController extends NetworkController {
      *                          request is received by this server
      */
     constructor(id: number, topologyPeers: Map<number, string>,
+            peerKeys: Map<number, string>,
+            clientKeys: Map<number, string>,
             externalEndpoint: string,
             onMessageCallback: (message: Envelope<Message>) => void|any,
             onRequestCallback: (msg: string[]) => void|any) {
         super();
         this.id = id;
         this.topologyPeers = topologyPeers;
-        this.onMessageCallback = onMessageCallback;
+        this.peerKeys = peerKeys;
+        this.clientKeys = clientKeys;
+        this.setOnMessageCallback(onMessageCallback);
 
         this.bindInternalSockets(topologyPeers);
         this.bindExternalSocket(externalEndpoint, onRequestCallback);
@@ -180,7 +199,7 @@ export class ServerNetworkController extends NetworkController {
 
         this.dealerSocket = zeromq.socket('dealer');
         this.dealerSocket.identity = this.id.toString();
-        this.dealerSocket.on('message', this.dispatchMessage.bind(this));
+        this.setOnRequestCallback(this.dispatchMessage.bind(this));
 
         resolveHostnameToNetworkAddress(internalEndpoint).then((endpointAddress: string) => {
             let networkInterface: string = identifyEndpointInterface(endpointAddress);
@@ -193,7 +212,7 @@ export class ServerNetworkController extends NetworkController {
     private bindExternalSocket(externalEndpoint: string,
         onCommandCallback: (msg: string[]) => (void|any)): void {
             this.replySocket = zeromq.socket('rep');
-            this.replySocket.on('message', onCommandCallback as any);
+            this.setOnRequestCallback(onCommandCallback);
 
             resolveHostnameToNetworkAddress(externalEndpoint).then((endpointAddress: string) => {
                 let networkInterface = identifyEndpointInterface(endpointAddress);
@@ -208,7 +227,8 @@ export class ServerNetworkController extends NetworkController {
      */
     public sendMessage(msg: Message, to: number): void {
         console.log('Server ' + this.id + ' sending ' + msg.type + ' message to ' + to);
-        var marshalled = this.marshallMessage(msg, this.id, to);
+        var signed = signObject(msg, this.peerKeys.get(this.id)!) as SignedObject<Message>;
+        var marshalled = this.marshallMessage(signed, this.id, to);
         marshalled.unshift(to.toString());
 
         this.routerSocket.send(marshalled);
@@ -250,6 +270,23 @@ export class ServerNetworkController extends NetworkController {
         var message = this.unmarshallMessage(Array.prototype.slice.call(arguments));
         console.log('Server ' + message.ids[message.ids.length - 1] + ': Received message of type ' + message.type + ' from ' + message.ids[0]);
         this.onMessageCallback(message);
+    }
+
+    public getOnMessageCallback(): (message: Envelope<Message>) => void|any {
+        return this.onMessageCallback;
+    }
+
+    public setOnMessageCallback(onMessage: (message: Envelope<Message>) => void|any) {
+        this.onMessageCallback = onMessage;
+    }
+
+    public getOnRequestCallback(): (msg: string[]) => void|any {
+        return this.onRequestCallback;
+    }
+
+    public setOnRequestCallback(onRequest: (msg: string[]) => void|any) {
+        this.onRequestCallback = onRequest;
+        this.replySocket.on('message', onRequest as any);
     }
 
     /**
@@ -389,10 +426,11 @@ export class SynchronousServerNetworkController extends ServerNetworkController
      * @inheritDoc
      */
     constructor(id: number, topologyPeers: Map<number, string>,
+            peerKeys: Map<number, string>, clientKeys: Map<number, string>,
             externalEndpoint: string,
             onMessageCallback: (message: Envelope<Message>) => void|any,
             onCommandCallback: (msg: string[]) => void|any) {
-        super(id, topologyPeers, externalEndpoint, onMessageCallback, onCommandCallback);
+        super(id, topologyPeers, peerKeys, clientKeys, externalEndpoint, onMessageCallback, onCommandCallback);
         this.pendingReplies = new Map<string, QPromise<Envelope<Reply>>>();
     }
 
@@ -401,7 +439,8 @@ export class SynchronousServerNetworkController extends ServerNetworkController
      */
     public sendMessageSync(req: Message, to: number, timeout?: number): QPromise<Envelope<Reply>> {
         console.log('Server ' + this.id + ' sending ' + req.type + ' message to ' + to);
-        var marshalled = this.marshallMessage(req, this.id, to);
+        var signed = signObject(req, this.peerKeys.get(this.id)!) as SignedObject<Message>;
+        var marshalled = this.marshallMessage(signed, this.id, to);
         marshalled.unshift(to.toString());
         
         var p = new QPromise<Envelope<Reply>>();
@@ -445,7 +484,7 @@ export class SynchronousServerNetworkController extends ServerNetworkController
      */
     public sendReply(msg: Reply, to: number): void {
         console.log('Server ' + this.id + ' replies with ' + msg.type + ' message to ' + to);
-        var marshalled = this.marshallMessage(msg, this.id, to, msg.serialUUID);
+        var marshalled = this.marshallMessage(signObject(msg, this.peerKeys.get(this.id)!) as SignedObject<Reply>, this.id, to, msg.serialUUID);
         marshalled.unshift(to.toString());
         this.routerSocket.send(marshalled);
     }

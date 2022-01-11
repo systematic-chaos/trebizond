@@ -10,7 +10,8 @@
  * trebizond-common/datatypes.ts
  */
 
-import { SignedBytes } from './crypto';
+import { SignedBytes,
+         SignedObject } from './crypto';
 
 export interface Message {
     type: string;
@@ -21,7 +22,7 @@ export interface Envelope<M extends Message> {
     ids: string[];
     type: string;
     serialUUID: string;
-    msg: M;
+    msg: SignedObject<M>;
 }
 
 /* These abstract classes implementation is provided by the platform *
@@ -76,8 +77,9 @@ export interface CollectiveReply<R extends Result> extends Message {
     resultAcknowledgments: Array<SignedBytes>; // Other replicas' results hashes
 }
 
-export interface Accusation extends Message {
+export interface Accusation<Op extends Operation> extends Message {
     type: 'Accusation';
+    message: SignedObject<OpMessage<Op>>;
 }
 
 export interface Init<Op extends Operation> extends OpMessage<Op> {

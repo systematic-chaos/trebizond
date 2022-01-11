@@ -8,6 +8,7 @@
     },
     "files": [
         "networkController.ts",
+        "failureDetector.ts",
         "trebizondRedisServer.ts"
     ]
 }
