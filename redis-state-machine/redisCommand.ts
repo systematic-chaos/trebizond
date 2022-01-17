@@ -35,6 +35,10 @@ export class RedisOperation extends Operation implements RedisCommand {
         this.operator = operator;
         this.value = value;
     }
+
+    public isReadOperation(): boolean {
+        return this.operator == RedisOperator.check;
+    }
 }
 
 export class RedisResult extends Result implements RedisCommand {
@@ -54,7 +58,8 @@ export enum RedisOperator {
     add = '+',
     substract = '-',
     multiply = '*',
-    divide = '/'
+    divide = '/',
+    check = '<-'
 }
 
 export class RedisStateMachine extends StateMachine<RedisOperation, RedisResult> {
@@ -92,8 +97,10 @@ export class RedisStateMachine extends StateMachine<RedisOperation, RedisResult>
                     newValue = op.value;
             }
         }
-        this.redis.set(op.key, newValue);
-        console.log('Operation committed: ' + op.key + op.operator + op.value);
+        if (RedisOperator.check != op.operator) {
+            this.redis.set(op.key, newValue);
+            console.log('Operation committed: ' + op.key + op.operator + op.value);
+        }
 
         this.redis.get(op.key).then((result) => {
             newValue = Number(result);

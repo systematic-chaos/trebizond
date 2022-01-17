@@ -13,7 +13,6 @@
 import { RedisOperation,
          RedisOperator,
          RedisResult } from '../redis-state-machine/redisCommand';
-import { Result } from '../trebizond-common/datatypes';
 import { TrebizondClient } from './trebizondClient';
 import * as fs from 'fs';
 
@@ -24,8 +23,7 @@ if (process.argv.length != 4) {
 
 let clientConf : string[] = fs.readFileSync(process.argv[2], 'utf-8').split('\t').filter(Boolean);
 let clientId: number = Number(clientConf[0]);
-let clientEndpoint: string = clientConf[1];
-let clientPrivateKey: string = clientConf[2];
+let clientPrivateKey: string = clientConf[1];
 clientPrivateKey = fs.readFileSync(clientPrivateKey, 'utf-8');
 
 let serversFile: string = process.argv[2];
@@ -37,7 +35,7 @@ servers.forEach((element) => {
     serversConfig.set(Number(serverConfig[0]), [serverConfig[1], serverPublicKey]);
 });
 
-var client = new TrebizondClient([clientId, clientEndpoint, clientPrivateKey], serversConfig);
+var client = new TrebizondClient<RedisOperation, RedisResult>([clientId, clientPrivateKey], serversConfig);
 
 var A: number = 0;
 var B: number = 0;
@@ -46,8 +44,8 @@ while (true) {
     var nextOperation: RedisOperation;
     setTimeout(() => {
         nextOperation = generateRedisCommand();
-        client.sendCommand(nextOperation).then((value: Result) => {
-            let opResult = value as RedisResult;
+        client.sendCommand(nextOperation).then((value: RedisResult) => {
+            let opResult = value;
             switch (opResult.key) {
                 case 'A':
                     A = opResult.value;

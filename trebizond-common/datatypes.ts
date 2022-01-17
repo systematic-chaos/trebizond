@@ -10,7 +10,7 @@
  * trebizond-common/datatypes.ts
  */
 
-import { SignedBytes,
+import { SignedText,
          SignedObject } from './crypto';
 
 export interface Message {
@@ -28,6 +28,7 @@ export interface Envelope<M extends Message> {
 /* These abstract classes implementation is provided by the platform *
  * onto which the consensus algorithm is integrated.                 */
 export abstract class Operation {
+    public abstract isReadOperation(): boolean;
 }
 
 export abstract class Result {
@@ -37,10 +38,16 @@ export interface TrebizondOperation<Op extends Operation> {
     operation: Op;
     uuid: string;
     timestamp: Date;
+    broadcast: boolean;
 }
 
 export interface OpMessage<Op extends Operation> extends Message {
     operation: TrebizondOperation<Op>;
+}
+
+export interface LeaderRedirection extends Message {
+    type: 'LeaderRedirection';
+    leader: number;
 }
 
 export interface LeadershipVote extends Message {
@@ -52,7 +59,7 @@ export interface LeadershipVote extends Message {
 export interface LeaderConfirmation extends Message {
     type: 'LeaderConfirmation';
     leader: LeadershipVote;
-    votes: Array<SignedBytes>; // Other replicas' leadership votes hashes
+    votes: Array<SignedText>; // Other replicas' leadership votes hashes
 }
 
 export interface OperationRequest<Op extends Operation> extends OpMessage<Op> {
@@ -74,7 +81,7 @@ export interface SingleReply<R extends Result> extends Message {
 export interface CollectiveReply<R extends Result> extends Message {
     type: 'CollectiveReply';
     result: TrebizondResult<R>;
-    resultAcknowledgments: Array<SignedBytes>; // Other replicas' results hashes
+    resultAcknowledgments: Map<number, SignedText>; // Other replicas' results hashes
 }
 
 export interface Accusation<Op extends Operation> extends Message {

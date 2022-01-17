@@ -38,3 +38,12 @@ export function convertObjectToArray(object: any): Array<any> {
     }
     return array;
 }
+
+export function every<S>(array: Array<any>, predicate: (elem: any, otherArg?: S) => boolean, otherArg?: S): boolean {
+    for (let elem of array) {
+        if (!predicate(elem, otherArg)) {
+            return false;
+        }
+    }
+    return true;
+}

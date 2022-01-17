@@ -22,4 +22,8 @@ export abstract class StateMachine<Op extends Operation, R extends Result> {
     public abstract getSnapshot(): any;
 
     public abstract setSnapshot(snapshot: any): void;
+
+    public isReadOperation(operation: Op): boolean {
+        return operation.isReadOperation();
+    }
 }
