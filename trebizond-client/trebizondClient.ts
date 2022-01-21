@@ -197,7 +197,7 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
 
             /**
              * There exist a number of similar single replies to state that
-             * consensus on a certain operation result has been reached.
+             * consensus on some operation result has been reached.
              * This enables resolving asynchronous output for such a result.
              */
             if (consensusResult !== null) {

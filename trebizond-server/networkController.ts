@@ -43,7 +43,7 @@ export abstract class NetworkController {
 
     /**
      * Socket used for receiving commands from clients and answering them
-     * upong their commitment or refusal
+     * upon their commitment or refusal
      */
     protected replySocket!: zeromq.Socket;
 
