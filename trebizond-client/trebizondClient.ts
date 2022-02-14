@@ -68,23 +68,23 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
 
     private connectToServers(serverTopology: Map<number, [string, any]>,
             requestSockets: Map<number, zeromq.Socket>): number {
-        serverTopology.forEach((value: [string, any], key: number) => {
+        serverTopology.forEach((value: [string, any], serverId: number) => {
             if (!value[0].startsWith(TrebizondClient.PROTOCOL_PREFIX)) {
                 let serverEndpoint = TrebizondClient.PROTOCOL_PREFIX + value[0];
-                serverTopology.set(key, [serverEndpoint, value[1]]);
+                serverTopology.set(serverId, [serverEndpoint, value[1]]);
                 let serverSocket = zeromq.createSocket('req');
                 try {
                     serverSocket.connect(serverEndpoint);
-                    console.log('Connected to cluster endpoint ' + key +
+                    console.log('Connected to cluster endpoint ' + serverId +
                         ' (' + serverEndpoint + ')');
                     
                     serverSocket.on('message', (msg: any) => {
-                        this.dispatchServerMessage(JSON.parse(msg).toString(), key);
+                        this.dispatchServerMessage(JSON.parse(msg), serverId);
                     });
-                    requestSockets.set(key, serverSocket);
+                    requestSockets.set(serverId, serverSocket);
                 } catch(ex) {
                     console.error('Failed to connect to cluster endpoint ' +
-                        key + ' (' + serverEndpoint + ')');
+                        serverId + ' (' + serverEndpoint + ')');
                 }
             }
         });

@@ -12,6 +12,7 @@
 
 import { Message,
          Envelope,
+         OpMessage,
          Reply } from '../trebizond-common/datatypes';
 import { checkObjectSignature,
          signObject,
@@ -152,8 +153,8 @@ export class ServerNetworkController extends NetworkController {
      * function provided by the server instantiating this controller,
      * to be called when a request message from another server is received
      */
-    protected onMessageCallback!: (message: Envelope<Message>) => void|any;
-    protected onRequestCallback!: (request: string[]) => void|any;
+    protected onMessageCallback!: (message: SignedObject<Message>) => void|any;
+    protected onRequestCallback!: (request: OpMessage<any>) => void|any;
 
     /**
      * NetworkController class constructor
@@ -172,8 +173,8 @@ export class ServerNetworkController extends NetworkController {
             peerKeys: Map<number, string>,
             clientKeys: Map<number, string>,
             externalEndpoint: string,
-            onMessageCallback: (message: Envelope<Message>) => void|any,
-            onRequestCallback: (msg: string[]) => void|any) {
+            onMessageCallback: (message: SignedObject<Message>) => void|any,
+            onRequestCallback: (msg: OpMessage<any>) => void|any) {
         super();
         this.id = id;
         this.topologyPeers = topologyPeers;
@@ -199,7 +200,7 @@ export class ServerNetworkController extends NetworkController {
 
         this.dealerSocket = zeromq.socket('dealer');
         this.dealerSocket.identity = this.id.toString();
-        this.setOnRequestCallback(this.dispatchMessage.bind(this));
+        this.dealerSocket.on('message', this.dispatchMessage.bind(this));
 
         resolveHostnameToNetworkAddress(internalEndpoint).then((endpointAddress: string) => {
             let networkInterface: string = identifyEndpointInterface(endpointAddress);
@@ -210,7 +211,7 @@ export class ServerNetworkController extends NetworkController {
     }
 
     private bindExternalSocket(externalEndpoint: string,
-        onCommandCallback: (msg: string[]) => (void|any)): void {
+        onCommandCallback: (msg: OpMessage<any>) => (void|any)): void {
             this.replySocket = zeromq.socket('rep');
             this.setOnRequestCallback(onCommandCallback);
 
@@ -260,33 +261,50 @@ export class ServerNetworkController extends NetworkController {
      * @inheritDoc
      */
     public replyClientOperation(msg: Message): void {
-        this.replySocket.send([JSON.stringify(msg)]);
+        console.log('Server ' + this.id + ' sending ' + msg.type + ' reply message to client');
+        var signed = signObject(msg, this.peerKeys.get(this.id)!) as SignedObject<Message>;
+        this.replySocket.send(JSON.stringify(signed));
     }
 
     /**
      * @inheritDoc
      */
     protected dispatchMessage(): void {
-        var message = this.unmarshallMessage(Array.prototype.slice.call(arguments));
+        var message: Envelope<Message> = this.unmarshallMessage(Array.prototype.slice.call(arguments));
         console.log('Server ' + message.ids[message.ids.length - 1] + ': Received message of type ' + message.type + ' from ' + message.ids[0]);
-        this.onMessageCallback(message);
+
+        // Check message validity before dispatching it
+        var sourceKey = this.peerKeys.get(message.msg.value.from);
+        if (sourceKey && checkObjectSignature(message.msg, sourceKey)
+                && message.type === message.msg.value.type) {
+            this.onMessageCallback(message.msg);
+        }
     }
 
-    public getOnMessageCallback(): (message: Envelope<Message>) => void|any {
+    public getOnMessageCallback(): (message: SignedObject<Message>) => void|any {
         return this.onMessageCallback;
     }
 
-    public setOnMessageCallback(onMessage: (message: Envelope<Message>) => void|any) {
+    public setOnMessageCallback(onMessage: (msg: SignedObject<Message>) => void|any) {
         this.onMessageCallback = onMessage;
     }
 
-    public getOnRequestCallback(): (msg: string[]) => void|any {
+    public getOnRequestCallback(): (msg: OpMessage<any>) => void|any {
         return this.onRequestCallback;
     }
 
-    public setOnRequestCallback(onRequest: (msg: string[]) => void|any) {
+    public setOnRequestCallback(onRequest: (msg: OpMessage<any>) => void|any) {
         this.onRequestCallback = onRequest;
-        this.replySocket.on('message', onRequest as any);
+
+        var clientKeys = this.clientKeys;
+        function requestUnmarshaller(buffer: string[]): void {
+            let signedMsg: SignedObject<OpMessage<any>> = JSON.parse(buffer.toString());
+            let sourceKey = clientKeys.get(signedMsg.value.from);
+            if (sourceKey && checkObjectSignature(signedMsg, sourceKey)) {
+                onRequest(signedMsg.value);
+            }
+        }
+        this.replySocket.on('message', requestUnmarshaller as any);
     }
 
     /**
@@ -428,8 +446,8 @@ export class SynchronousServerNetworkController extends ServerNetworkController
     constructor(id: number, topologyPeers: Map<number, string>,
             peerKeys: Map<number, string>, clientKeys: Map<number, string>,
             externalEndpoint: string,
-            onMessageCallback: (message: Envelope<Message>) => void|any,
-            onCommandCallback: (msg: string[]) => void|any) {
+            onMessageCallback: (message: SignedObject<Message>) => void|any,
+            onCommandCallback: (msg: OpMessage<any>) => void|any) {
         super(id, topologyPeers, peerKeys, clientKeys, externalEndpoint, onMessageCallback, onCommandCallback);
         this.pendingReplies = new Map<string, QPromise<Envelope<Reply>>>();
     }
@@ -488,17 +506,23 @@ export class SynchronousServerNetworkController extends ServerNetworkController
         marshalled.unshift(to.toString());
         this.routerSocket.send(marshalled);
     }
-
+    
     /**
      * @inheritDoc
      */
     protected dispatchMessage(): void {
         var message = this.unmarshallMessage(Array.prototype.slice.call(arguments));
         console.log('Server' + message.ids[message.ids.length - 1] + ': Received message of type ' + message.type + ' from ' + message.ids[0]);
-        if (!this.isReplyMessage(message)) {
-            this.onMessageCallback(message);
-        } else {
-            this.dispatchReplyMessage(message as Envelope<Reply>);
+
+        // Check message validity before dispatching it
+        var sourceKey = this.peerKeys.get(message.msg.value.from);
+        if (sourceKey && checkObjectSignature(message.msg, sourceKey)
+                && message.type == message.msg.value.type) {
+            if (!this.isReplyMessage(message)) {
+                this.onMessageCallback(message.msg);
+            } else {
+                this.dispatchReplyMessage(message as Envelope<Reply>);
+            }
         }
     }
 

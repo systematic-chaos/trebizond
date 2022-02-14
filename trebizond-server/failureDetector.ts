@@ -30,8 +30,8 @@ export class FailureDetector<Op extends Operation> {
     private validator: MessageValidator<Op>;
     private suspectNodes: Array<number>;
 
-    private onMessageRedirect!: (message: Envelope<Message>) => void|any;
-    private onRequestRedirect!: (request: string[]) => void;
+    private onMessageRedirect!: (message: SignedObject<Message>) => void|any;
+    private onRequestRedirect!: (request: OperationRequest<Op>) => void;
 
     constructor(replicaId: number, peersPublicKeys: Map<number, string>,
             networkController: ServerNetworkController,
@@ -82,16 +82,16 @@ export class FailureDetector<Op extends Operation> {
      * and it fails semantic validation, encapsulate it into an accusation message
      * and broadcast accusation to all other replicas.
      */
-    public onMessage(msg: Envelope<Message>) {
+    public onMessage(msg: SignedObject<Message>) {
 
-        if (this.instanceOfOperationMessage(msg.msg.value)) {
-            if (this.semanticValidation(msg.msg.value)) {
+        if (this.instanceOfOperationMessage(msg.value)) {
+            if (this.semanticValidation(msg.value)) {
                 this.onMessageRedirect(msg);
             } else {
                 let accusation: Accusation<Op> = {
                     type: 'Accusation',
                     from: this.id,
-                    message: msg.msg as SignedObject<OpMessage<Op>>
+                    message: msg as SignedObject<OpMessage<Op>>
                 };
                 this.networkController.sendBroadcast(accusation);
             }
@@ -106,10 +106,8 @@ export class FailureDetector<Op extends Operation> {
      * it is redirected to the application protocol.
      * Otherwise, it is discarded.
      */
-    public onRequest(request: string[]) {
-        var req: OperationRequest<Op> = JSON.parse(request.toString());
-
-        if (this.validator.semanticValidation(req.operation.operation)) {
+    public onRequest(request: OperationRequest<Op>) {
+        if (this.validator.semanticValidation(request.operation.operation)) {
             this.onRequestRedirect(request);
         }
     }

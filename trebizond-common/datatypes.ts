@@ -59,7 +59,7 @@ export interface LeadershipVote extends Message {
 export interface LeaderConfirmation extends Message {
     type: 'LeaderConfirmation';
     leader: LeadershipVote;
-    votes: Array<SignedText>; // Other replicas' leadership votes hashes
+    votes: Map<number, Uint8Array>; // Other replicas' leadership votes hashes
 }
 
 export interface OperationRequest<Op extends Operation> extends OpMessage<Op> {
