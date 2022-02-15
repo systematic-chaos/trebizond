@@ -45,6 +45,10 @@ export interface OpMessage<Op extends Operation> extends Message {
     operation: TrebizondOperation<Op>;
 }
 
+export interface SignedOpMessage<Op extends Operation> extends Message {
+    operation: SignedObject<OpMessage<Op>>;
+}
+
 export interface LeaderRedirection extends Message {
     type: 'LeaderRedirection';
     leader: number;
@@ -62,12 +66,6 @@ export interface LeaderConfirmation extends Message {
     votes: Map<number, Uint8Array>; // Other replicas' leadership votes hashes
 }
 
-export interface OperationRequest<Op extends Operation> extends OpMessage<Op> {
-    type: 'OperationRequest';
-    origen: number;
-    broadcast: boolean;
-}
-
 export interface TrebizondResult<R extends Result> {
     result: R;
     opUuid: string;
@@ -75,13 +73,13 @@ export interface TrebizondResult<R extends Result> {
 
 export interface SingleReply<R extends Result> extends Message {
     type: 'SingleReply';
-    result: TrebizondResult<R>;
+    result: SignedObject<TrebizondResult<R>>;
 }
 
 export interface CollectiveReply<R extends Result> extends Message {
     type: 'CollectiveReply';
     result: TrebizondResult<R>;
-    resultAcknowledgments: Map<number, SignedText>; // Other replicas' results hashes
+    resultAcknowledgments: Map<number, Uint8Array>; // Replicas' result signed hashes
 }
 
 export interface Accusation<Op extends Operation> extends Message {
@@ -89,19 +87,27 @@ export interface Accusation<Op extends Operation> extends Message {
     message: SignedObject<OpMessage<Op>>;
 }
 
-export interface Init<Op extends Operation> extends OpMessage<Op> {
+export interface Init<Op extends Operation> extends SignedOpMessage<Op> {
     type: 'Init';
-    currentStatus: Uint8Array; // status digest
+    currentStatus: string; // status digest
 }
 
-export interface Echo<Op extends Operation> extends OpMessage<Op> {
+export interface Echo<Op extends Operation> extends SignedOpMessage<Op> {
     type: 'Echo';
-    currentStatus: Uint8Array; // status digest
+    currentStatus: string; // status digest
 }
 
-export interface Ready<Op extends Operation> extends OpMessage<Op> {
+export interface Ready<Op extends Operation> extends SignedOpMessage<Op> {
     type: 'Ready';
-    currentStatus: Uint8Array; // status digest
+    currentStatus: string; // status digest
+}
+
+export interface AtomicBroadcastMessageLog<Op extends Operation, R extends Result> {
+    init:  Map<number, Init<Op>>,
+    echo:  Map<number, Echo<Op>>,
+    ready: Map<number, Ready<Op>>,
+    accepted: Array<string>,
+    replies:  Map<number, SingleReply<R>> | CollectiveReply<R>
 }
 
 export interface Reply extends Message {

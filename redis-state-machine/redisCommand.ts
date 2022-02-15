@@ -13,6 +13,7 @@
 import { Operation,
          Result } from '../trebizond-common/datatypes';
 import { StateMachine } from '../state-machine-connector/command';
+import { RedisMessageValidator } from './redisMessageValidator';
 import { Deferred as QPromise } from '../trebizond-common/deferred';
 import { convertMapToArray,
          convertObjectToArray } from '../trebizond-common/util';
@@ -66,8 +67,8 @@ export class RedisStateMachine extends StateMachine<RedisOperation, RedisResult>
 
     private redis: Redis.Redis;
 
-    constructor(redis: Redis.Redis) {
-        super();
+    constructor(redis: Redis.Redis, msgValidator: RedisMessageValidator) {
+        super(msgValidator);
         this.redis = redis;
 
         this.setArgumentTransformer();

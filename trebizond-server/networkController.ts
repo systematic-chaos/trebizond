@@ -13,6 +13,7 @@
 import { Message,
          Envelope,
          OpMessage,
+         SignedOpMessage,
          Reply } from '../trebizond-common/datatypes';
 import { checkObjectSignature,
          signObject,
@@ -121,6 +122,12 @@ export abstract class NetworkController {
      * To be used as a callback function in ZeroMQ on 'message' events.
      */
     protected abstract dispatchMessage(): void;
+
+    /**
+     * Manages a message received from a client.
+     * To be used as a callback function in ZeroMQ on 'message' events.
+     */
+    protected abstract dispatchOpRequest(): void;
 }
 
 /**
@@ -154,7 +161,7 @@ export class ServerNetworkController extends NetworkController {
      * to be called when a request message from another server is received
      */
     protected onMessageCallback!: (message: SignedObject<Message>) => void|any;
-    protected onRequestCallback!: (request: OpMessage<any>) => void|any;
+    protected onRequestCallback!: (message: SignedObject<OpMessage<any>>) => void|any;
 
     /**
      * NetworkController class constructor
@@ -174,19 +181,19 @@ export class ServerNetworkController extends NetworkController {
             clientKeys: Map<number, string>,
             externalEndpoint: string,
             onMessageCallback: (message: SignedObject<Message>) => void|any,
-            onRequestCallback: (msg: OpMessage<any>) => void|any) {
+            onRequestCallback: (message: SignedObject<OpMessage<any>>) => void|any) {
         super();
         this.id = id;
         this.topologyPeers = topologyPeers;
         this.peerKeys = peerKeys;
         this.clientKeys = clientKeys;
-        this.setOnMessageCallback(onMessageCallback);
 
-        this.bindInternalSockets(topologyPeers);
+        this.bindInternalSockets(topologyPeers, onMessageCallback);
         this.bindExternalSocket(externalEndpoint, onRequestCallback);
     }
 
-    private bindInternalSockets(topologyPeers: Map<number, string>): void {
+    private bindInternalSockets(topologyPeers: Map<number, string>,
+            onMessageCallback: (msg: SignedObject<Message>) => void|any): void {
         var internalEndpoint: string = this.topologyPeers.get(this.id)!;
         this.topologyPeers.delete(this.id);
 
@@ -201,6 +208,7 @@ export class ServerNetworkController extends NetworkController {
         this.dealerSocket = zeromq.socket('dealer');
         this.dealerSocket.identity = this.id.toString();
         this.dealerSocket.on('message', this.dispatchMessage.bind(this));
+        this.setOnMessageCallback(onMessageCallback);
 
         resolveHostnameToNetworkAddress(internalEndpoint).then((endpointAddress: string) => {
             let networkInterface: string = identifyEndpointInterface(endpointAddress);
@@ -211,9 +219,10 @@ export class ServerNetworkController extends NetworkController {
     }
 
     private bindExternalSocket(externalEndpoint: string,
-        onCommandCallback: (msg: OpMessage<any>) => (void|any)): void {
+        onRequestCallback: (msg: SignedObject<OpMessage<any>>) => void|any): void {
             this.replySocket = zeromq.socket('rep');
-            this.setOnRequestCallback(onCommandCallback);
+            this.replySocket.on('message', this.dispatchOpRequest.bind(this));
+            this.setOnRequestCallback(onRequestCallback);
 
             resolveHostnameToNetworkAddress(externalEndpoint).then((endpointAddress: string) => {
                 let networkInterface = identifyEndpointInterface(endpointAddress);
@@ -289,22 +298,26 @@ export class ServerNetworkController extends NetworkController {
         this.onMessageCallback = onMessage;
     }
 
-    public getOnRequestCallback(): (msg: OpMessage<any>) => void|any {
+    /**
+     * @inheritDoc
+     */
+    protected dispatchOpRequest(): void {
+        var message: SignedObject<OpMessage<any>> = JSON.parse(Array.prototype.slice.call(arguments).toString());
+        console.log('Server ' + this.id + ': Received operation request message from client ' + message.value.from);
+
+        // Check message validity before dispatching it
+        var sourceKey = this.peerKeys.get(message.value.from);
+        if (sourceKey && checkObjectSignature(message, sourceKey)) {
+            this.onRequestCallback(message);
+        }
+    }
+
+    public getOnRequestCallback(): (msg: SignedObject<OpMessage<any>>) => void|any {
         return this.onRequestCallback;
     }
 
-    public setOnRequestCallback(onRequest: (msg: OpMessage<any>) => void|any) {
+    public setOnRequestCallback(onRequest: (msg: SignedObject<OpMessage<any>>) => void|any) {
         this.onRequestCallback = onRequest;
-
-        var clientKeys = this.clientKeys;
-        function requestUnmarshaller(buffer: string[]): void {
-            let signedMsg: SignedObject<OpMessage<any>> = JSON.parse(buffer.toString());
-            let sourceKey = clientKeys.get(signedMsg.value.from);
-            if (sourceKey && checkObjectSignature(signedMsg, sourceKey)) {
-                onRequest(signedMsg.value);
-            }
-        }
-        this.replySocket.on('message', requestUnmarshaller as any);
     }
 
     /**
@@ -447,7 +460,7 @@ export class SynchronousServerNetworkController extends ServerNetworkController
             peerKeys: Map<number, string>, clientKeys: Map<number, string>,
             externalEndpoint: string,
             onMessageCallback: (message: SignedObject<Message>) => void|any,
-            onCommandCallback: (msg: OpMessage<any>) => void|any) {
+            onCommandCallback: (message: SignedObject<OpMessage<any>>) => void|any) {
         super(id, topologyPeers, peerKeys, clientKeys, externalEndpoint, onMessageCallback, onCommandCallback);
         this.pendingReplies = new Map<string, QPromise<Envelope<Reply>>>();
     }

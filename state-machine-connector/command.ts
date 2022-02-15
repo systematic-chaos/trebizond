@@ -12,11 +12,18 @@
 
 import { Operation,
          Result } from '../trebizond-common/datatypes';
+import { MessageValidator } from '../state-machine-connector/messageValidator';
 import { SignedObject,
          hashText,
          signObject } from '../trebizond-common/crypto';
 
 export abstract class StateMachine<Op extends Operation, R extends Result> {
+
+    protected msgValidator: MessageValidator<Op>;
+
+    constructor(msgValidator: MessageValidator<Op>) {
+        this.msgValidator = msgValidator;
+    }
 
     public abstract executeOperation(operation: Op): Promise<R>;
 
@@ -26,6 +33,10 @@ export abstract class StateMachine<Op extends Operation, R extends Result> {
 
     public abstract setSnapshot(snapshot: any): void;
 
+    public getMessageValidator(): MessageValidator<Op> {
+        return this.msgValidator;
+    }
+
     public isReadOperation(operation: Op): boolean {
         return operation.isReadOperation();
     }
@@ -34,10 +45,7 @@ export abstract class StateMachine<Op extends Operation, R extends Result> {
 export class BlockChain<Op extends Operation, R extends Result> {
 
     private log: Array<SignedObject<Block<Op, R>>> = [];
-
-    constructor() {
-    }
-
+    
     public getBlockchainLog(): Array<SignedObject<Block<Op, R>>> {
         return this.log;
     }

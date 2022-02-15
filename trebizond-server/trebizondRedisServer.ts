@@ -13,6 +13,7 @@
 import { RedisOperation,
          RedisResult,
          RedisStateMachine } from '../redis-state-machine/redisCommand';
+import { RedisMessageValidator } from '../redis-state-machine/redisMessageValidator';
 import { TrebizondServer } from '../trebizond-server/server';
 import * as fs from 'fs';
 import * as Redis from 'ioredis';
@@ -69,4 +70,4 @@ var redis = Redis(redisPort, redisHost);
 var server = new TrebizondServer<RedisOperation, RedisResult>(
     id, peersTopology,
     peerKeys, clientKeys,
-    exposed, privateKey, new RedisStateMachine(redis));
+    exposed, privateKey, new RedisStateMachine(redis, new RedisMessageValidator()));

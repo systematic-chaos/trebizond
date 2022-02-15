@@ -12,9 +12,8 @@
 
 import { Cipher,
          SignedObject,
-         SignedText,
          checkObjectSignature,
-         checkTextSignature,
+         decryptText,
          hashObject } from '../trebizond-common/crypto';
 import { Deferred as QPromise } from '../trebizond-common/deferred';
 import { every,
@@ -25,7 +24,8 @@ import { Message,
          SingleReply,
          Operation,
          Result,
-         TrebizondOperation } from '../trebizond-common/datatypes';
+         TrebizondOperation,
+         TrebizondResult } from '../trebizond-common/datatypes';
 import * as zeromq from 'zeromq';
 
 export class TrebizondClient<Op extends Operation, R extends Result> {
@@ -166,11 +166,12 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
         if (this.currentOperation !== null
                 && this.currentOperation[0].uuid === reply.result.opUuid) {
             this.currentLeaderId = reply.from;
-            var result = reply.result.result;
-            var mainResultHash = hashObject(result);
+            var mainResult: TrebizondResult<R> = reply.result;
+            var mainResultHash = hashObject(mainResult);
             if (reply.resultAcknowledgments.size >= (2 * this.nReplicas + 1) / 3
-                    && every(Array.from(reply.resultAcknowledgments), this.matchesResultDigest, mainResultHash)) {
-                this.resolveCurrentOperation(result);
+                    && every(Array.from(reply.resultAcknowledgments),
+                            this.matchesResultDigest.bind(this), mainResultHash)) {
+                this.resolveCurrentOperation(mainResult.result);
             }
         }
     }
@@ -182,17 +183,17 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
          * The result wrapped by the reply message is stored.
          */
         if (this.currentOperation !== null
-                && this.currentOperation[0].uuid === reply.result.opUuid
+                && this.currentOperation[0].uuid == reply.result.value.opUuid
                 && !this.currentReplies.has(reply.from)) {
-            this.currentReplies.set(reply.from, reply.result.result);
+            this.currentReplies.set(reply.from, reply.result.value.result);
 
             /**
              * Set minimum votes a result must gather in order to reach consensus,
              * depending on its nature as a read-only or a write-implying operation
              */
             var consensusThreshold = this.currentOperation[0].operation.isReadOperation() ?
-                    this.readOpConsensusThreshold(this.nReplicas)
-                    : this.writeOpConsensusThreshold(this.nReplicas);
+                    this.readOpConsensusThreshold()
+                    : this.writeOpConsensusThreshold();
             var consensusResult = this.enoughMatchingReplies(consensusThreshold);
 
             /**
@@ -218,11 +219,11 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
         }
     }
 
-    private matchesResultDigest(acknowledgment: [number, SignedText], mainHash?: string): boolean {
+    private matchesResultDigest(acknowledgment: [number, Uint8Array], mainHash?: string): boolean {
+        var source: number = acknowledgment[0];
         var source: number = acknowledgment[0];
         return this.serversTopology.has(source)
-            && checkTextSignature(acknowledgment[1], this.serversTopology.get(source)![1])
-            && mainHash === acknowledgment[1].value;
+                && mainHash === decryptText(acknowledgment[1], this.serversTopology.get(source)![1]);
     }
     
     private unicastOperationRequest(operation: TrebizondOperation<Op>): void {
@@ -352,11 +353,11 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
             Math.floor(Math.random() * (nReplicas ? nReplicas : this.nReplicas));
     }
 
-    private writeOpConsensusThreshold(n: number): number {
+    private writeOpConsensusThreshold(n: number = this.nReplicas): number {
         return Math.ceil((2 * n + 1) / 3);
     }
     
-    private readOpConsensusThreshold(n: number): number {
+    private readOpConsensusThreshold(n: number = this.nReplicas): number {
         return Math.ceil((n - 1) / 2);
     }
 }

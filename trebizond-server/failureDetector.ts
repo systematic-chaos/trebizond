@@ -11,10 +11,8 @@
  */
 
 import { Accusation,
-         Envelope,
          Message,
          Operation,
-         OperationRequest,
          OpMessage,
          TrebizondOperation } from '../trebizond-common/datatypes';
 import { ServerNetworkController } from './networkController';
@@ -31,7 +29,7 @@ export class FailureDetector<Op extends Operation> {
     private suspectNodes: Array<number>;
 
     private onMessageRedirect!: (message: SignedObject<Message>) => void|any;
-    private onRequestRedirect!: (request: OperationRequest<Op>) => void;
+    private onRequestRedirect!: (request: SignedObject<OpMessage<Op>>) => void;
 
     constructor(replicaId: number, peersPublicKeys: Map<number, string>,
             networkController: ServerNetworkController,
@@ -85,15 +83,20 @@ export class FailureDetector<Op extends Operation> {
     public onMessage(msg: SignedObject<Message>) {
 
         if (this.instanceOfOperationMessage(msg.value)) {
-            if (this.semanticValidation(msg.value)) {
-                this.onMessageRedirect(msg);
-            } else {
-                let accusation: Accusation<Op> = {
-                    type: 'Accusation',
-                    from: this.id,
-                    message: msg as SignedObject<OpMessage<Op>>
-                };
-                this.networkController.sendBroadcast(accusation);
+            if (this.authenticationValidation(msg)) {
+                if (this.semanticValidation(msg.value)) {
+                    this.onMessageRedirect(msg);
+                } else {
+                    let accusation: Accusation<Op> = {
+                        type: 'Accusation',
+                        from: this.id,
+                        message: msg as SignedObject<OpMessage<Op>>
+                    };
+                    this.networkController.sendBroadcast(accusation);
+                    if (this.suspectNodes.indexOf(msg.value.from) != -1) {
+                        this.suspectNodes.push(msg.value.from);
+                    }
+                }
             }
         } else {
             this.onMessageRedirect(msg);
@@ -106,8 +109,8 @@ export class FailureDetector<Op extends Operation> {
      * it is redirected to the application protocol.
      * Otherwise, it is discarded.
      */
-    public onRequest(request: OperationRequest<Op>) {
-        if (this.validator.semanticValidation(request.operation.operation)) {
+    public onRequest(request: SignedObject<OpMessage<any>>) {
+        if (this.validator.semanticValidation(request.value.operation.operation)) {
             this.onRequestRedirect(request);
         }
     }
