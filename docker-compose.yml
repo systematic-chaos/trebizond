@@ -1,21 +1,9 @@
 version: '3'
 services:
   trebizond_1:
-    image: systematic-chaos/trebizond:latest
+    image: node:12-slim
     container_name: trebizond_server_1
-    command: node trebizond-redis-server/dist/trebizond-redis-server/trebizondRedisServer.js eth0:6530 redis_1 1 dockerEndpoints.txt
-    volumes:
-     - .:/home/trebizond
-    ports:
-     - "6530:6530"
-    networks:
-     - trebizond-back-tier
-    links:
-     - redis_1
-  trebizond_2:
-    image: systematic-chaos/trebizond:latest
-    container_name: trebizond_server_2
-    command: node trebizond-redis-server/dist/trebizond-redis-server/trebizondRedisServer.js eth0:6530 redis_2 2 dockerEndpoints.txt
+    command: node trebizond/dist/trebizond-server/trebizondRedisServer.js eth0:6530 redis_1 1 dockerEndpoints.txt
     volumes:
      - .:/home/trebizond
     ports:
@@ -23,11 +11,11 @@ services:
     networks:
      - trebizond-back-tier
     links:
-     - redis_2
-  trebizond_3:
-    image: systematic-chaos/trebizond:latest
-    container_name: trebizond_server_3
-    command: node trebizond-redis-server/dist/trebizond-redis-server/trebizondRedisServer.js eth0:6530 redis_3 3 dockerEndpoints.txt
+     - redis_1
+  trebizond_2:
+    image: node:12-slim
+    container_name: trebizond_server_2
+    command: node trebizond/dist/trebizond-server/trebizondRedisServer.js eth0:6530 redis_2 2 dockerEndpoints.txt
     volumes:
      - .:/home/trebizond
     ports:
@@ -35,11 +23,11 @@ services:
     networks:
      - trebizond-back-tier
     links:
-     - redis_3
-  trebizond_4:
-    image: systematic-chaos/trebizond:latest
-    container_name: trebizond_server_4
-    command: node trebizond-redis-server/dist/trebizond-redis-server/trebizondRedisServer.js eth0:6530 redis_4 4 dockerEndpoints.txt
+     - redis_2
+  trebizond_3:
+    image: node:12-slim
+    container_name: trebizond_server_3
+    command: node trebizond/dist/trebizond-server/trebizondRedisServer.js eth0:6530 redis_3 3 dockerEndpoints.txt
     volumes:
      - .:/home/trebizond
     ports:
@@ -47,11 +35,11 @@ services:
     networks:
      - trebizond-back-tier
     links:
-     - redis_4
-  trebizond_5:
-    image: systematic-chaos/trebizond:latest
-    container_name: trebizond_server_5
-    command: node trebizond-redis-server/dist/trebizond-redis-server/trebizondRedisServer.js eth0:6530 redis_5 5 dockerEndpoints.txt
+     - redis_3
+  trebizond_4:
+    image: node:12-slim
+    container_name: trebizond_server_4
+    command: node trebizond/dist/trebizond-server/trebizondRedisServer.js eth0:6530 redis_4 4 dockerEndpoints.txt
     volumes:
      - .:/home/trebizond
     ports:
@@ -59,11 +47,11 @@ services:
     networks:
      - trebizond-back-tier
     links:
-     - redis_5
-  trebizond_6:
-    image: systematic-chaos/trebizond:latest
-    container_name: trebizond_server_6
-    command: node trebizond-redis-server/dist/trebizond-redis-server/trebizondRedisServer.js eth0:6530 redis_6 6 dockerEndpoints.txt
+     - redis_4
+  trebizond_5:
+    image: node:12-slim
+    container_name: trebizond_server_5
+    command: node trebizond/dist/trebizond-server/trebizondRedisServer.js eth0:6530 redis_5 5 dockerEndpoints.txt
     volumes:
      - .:/home/trebizond
     ports:
@@ -71,15 +59,27 @@ services:
     networks:
      - trebizond-back-tier
     links:
-     - redis_6
-  trebizond_7:
-    image: systematic-chaos/trebizond:latest
-    container_name: trebizond_server_7
-    command: node trebizond-redis-server/dist/trebizond-redis-server/trebizondRedisServer.js eth0:6530 redis_7 7 dockerEndpoints.txt
+     - redis_5
+  trebizond_6:
+    image: node:12-slim
+    container_name: trebizond_server_6
+    command: node trebizond/dist/trebizond-server/trebizondRedisServer.js eth0:6530 redis_6 6 dockerEndpoints.txt
     volumes:
      - .:/home/trebizond
     ports:
      - "6536:6530"
+    networks:
+     - trebizond-back-tier
+    links:
+     - redis_6
+  trebizond_7:
+    image: node:12-slim
+    container_name: trebizond_server_7
+    command: node trebizond/dist/trebizond-server/trebizondRedisServer.js eth0:6530 redis_7 7 dockerEndpoints.txt
+    volumes:
+     - .:/home/trebizond
+    ports:
+     - "6537:6530"
     networks:
      - trebizond-back-tier
     links:
