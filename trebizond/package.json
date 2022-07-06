@@ -32,7 +32,8 @@
         "ioredis": "^4.0.2",
         "bluebird": "^3.5.5",
         "crypto-js": "^3.3.0",
-        "tweetnacl-util": "^0.15.1"
+        "tweetnacl-util": "^0.15.1",
+        "minimist": "~1.2.6"
     },
     "devDependencies": {
         "@typescript-eslint/eslint-plugin": "^5.4.0",

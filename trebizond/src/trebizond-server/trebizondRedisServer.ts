@@ -16,7 +16,9 @@ import { RedisOperation,
 import { RedisMessageValidator } from '../redis-state-machine/redisMessageValidator';
 import { TrebizondServer } from '../trebizond-server/server';
 import * as fs from 'fs';
-import * as Redis from 'ioredis';
+import * as IORedis from 'ioredis';
+
+const Redis = IORedis.default;
 
 if (process.argv.length != 8) {
     console.error('usage: nodejs trebizondRedisServer.js <serverId> <exposedEndpoint> <redisEndpoint> <serverPrivateKeyFile> <serversFile> <clientsFile>');
@@ -65,7 +67,7 @@ if (redisEndpoint.lastIndexOf(':') > 0) {
     redisPort = 6379;
 }
 
-var redis = Redis(redisPort, redisHost);
+const redis = new Redis(redisPort, redisHost);
 
 var server = new TrebizondServer<RedisOperation, RedisResult>(
     id, peersTopology,
