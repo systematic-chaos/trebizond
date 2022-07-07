@@ -1,7 +1,0 @@
-trebizond_1:6530
-trebizond_2:6530
-trebizond_3:6530
-trebizond_4:6530
-trebizond_5:6530
-trebizond_6:6530
-trebizond_7:6530

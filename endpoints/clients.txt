@@ -1,0 +1,1 @@
+cli0	keys/cli_0.pub

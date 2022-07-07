@@ -1,0 +1,7 @@
+1	localhost:6531	keys/peer_1.pub
+2	localhost:6532	keys/peer_2.pub
+3	localhost:6533	keys/peer_3.pub
+4	localhost:6534	keys/peer_4.pub
+5	localhost:6535	keys/peer_5.pub
+6	localhost:6536	keys/peer_6.pub
+7	localhost:6537	keys/peer_7.pub

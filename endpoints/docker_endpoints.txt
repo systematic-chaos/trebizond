@@ -1,0 +1,7 @@
+1	peer_1:6530	keys/peer_1.pub
+2	peer_2:6530	keys/peer_2.pub
+3	peer_3:6530	keys/peer_3.pub
+4	peer_4:6530	keys/peer_4.pub
+5	peer_5:6530	keys/peer_5.pub
+6	peer_6:6530	keys/peer_6.pub
+7	peer_7:6530	keys/peer_7.pub
