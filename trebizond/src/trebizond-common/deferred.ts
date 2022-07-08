@@ -19,8 +19,8 @@ export class Deferred<T> {
     private fate: 'resolved' | 'unresolved';
     private state: 'pending' | 'fulfilled' | 'rejected';
 
-    private _resolve: Function = (arg?: any) => {};
-    private _reject: Function = (arg?: any) => {};
+    private _resolve: (value: T | PromiseLike<T>) => void;
+    private _reject: (reason?: any) => void;
 
     constructor() {
         this.state = 'pending';

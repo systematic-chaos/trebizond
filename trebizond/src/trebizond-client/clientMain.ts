@@ -21,31 +21,28 @@ if (process.argv.length != 4) {
     process.exit(1);
 }
 
-let clientConf : string[] = fs.readFileSync(process.argv[2], 'utf-8').split('\t').filter(Boolean);
-let clientId: number = Number(clientConf[0]);
-let clientPrivateKey: string = clientConf[1];
-clientPrivateKey = fs.readFileSync(clientPrivateKey, 'utf-8');
+const clientConf = fs.readFileSync(process.argv[2], 'utf-8').split('\t').filter(Boolean);
+const clientId = parseInt(clientConf[0]);
+const clientPrivateKey = fs.readFileSync(clientConf[1], 'utf-8');
+const servers = fs.readFileSync(process.argv[2], 'utf-8').split('\n').filter(Boolean);
 
-let serversFile: string = process.argv[2];
-let servers = fs.readFileSync(serversFile, 'utf-8').split('\n').filter(Boolean);
 var serversConfig = new Map<number, [string, string]>();
 servers.forEach((element) => {
-    let serverConfig: string[] = element.split('\t');
-    let serverPublicKey: string = fs.readFileSync(serverConfig[2], 'utf-8');
-    serversConfig.set(Number(serverConfig[0]), [serverConfig[1], serverPublicKey]);
+    const serverConfig = element.split('\t');
+    const serverPublicKey = fs.readFileSync(serverConfig[2], 'utf-8');
+    serversConfig.set(parseInt(serverConfig[0]), [serverConfig[1], serverPublicKey]);
 });
 
 var client = new TrebizondClient<RedisOperation, RedisResult>([clientId, clientPrivateKey], serversConfig);
 
-var A: number = 0;
-var B: number = 0;
+let A = 0;
+let B = 0;
 
-while (true) {
+for (;;) {
     var nextOperation: RedisOperation;
     setTimeout(() => {
         nextOperation = generateRedisCommand();
-        client.sendCommand(nextOperation).then((value: RedisResult) => {
-            let opResult = value;
+        client.sendCommand(nextOperation).then((opResult: RedisResult) => {
             switch (opResult.key) {
                 case 'A':
                     A = opResult.value;

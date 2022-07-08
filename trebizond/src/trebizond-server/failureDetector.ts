@@ -60,7 +60,7 @@ export class FailureDetector<Op extends Operation> {
         let validationResult: boolean;
         if (this.instanceOfAccusation(message)) {
             // Recursive function call
-            let nestedCheck = this.semanticValidation((message as Accusation<Op>).message.value);
+            const nestedCheck = this.semanticValidation((message as Accusation<Op>).message.value);
             validationResult = !nestedCheck;
         } else if (this.instanceOfOperationMessage(message)) {
             validationResult = this.validator.semanticValidation((message as OpMessage<Op>).operation.operation);
@@ -87,7 +87,7 @@ export class FailureDetector<Op extends Operation> {
                 if (this.semanticValidation(msg.value)) {
                     this.onMessageRedirect(msg);
                 } else {
-                    let accusation: Accusation<Op> = {
+                    const accusation: Accusation<Op> = {
                         type: 'Accusation',
                         from: this.id,
                         message: msg as SignedObject<OpMessage<Op>>
@@ -116,14 +116,14 @@ export class FailureDetector<Op extends Operation> {
     }
     
     instanceOfAccusation(object: Message): object is Accusation<Op> {
-        return object.type === 'Accusation' && object.hasOwnProperty('message');
+        return object.type === 'Accusation' && !!Object.getOwnPropertyDescriptor(object, 'message');
     }
     
     instanceOfOperationMessage(object: Message): object is OpMessage<Op> {
-        if (!object.hasOwnProperty('operation'))
+        if (!Object.getOwnPropertyDescriptor(object, 'operation'))
             return false;
         var outerOp: TrebizondOperation<any> = (object as OpMessage<any>).operation;
-        if (!outerOp.hasOwnProperty('operation'))
+        if (!Object.getOwnPropertyDescriptor(outerOp, 'operation'))
             return false;
         var innerOp: any = outerOp.operation;
         return innerOp instanceof Operation;

@@ -122,8 +122,8 @@ export class RedisStateMachine extends StateMachine<RedisOperation, RedisResult>
                 && (result === null || result === undefined)) {
                     p.reject(err);
             } else {
-                let hash = new Map<string, number>();
-                for (let key in result) {
+                const hash = new Map<string, number>();
+                for (const key in result) {
                     hash.set(key, Number(result[key]));
                 }
                 p.resolve(hash);

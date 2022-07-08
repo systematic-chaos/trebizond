@@ -175,8 +175,8 @@ export abstract class BaseTrebizondServer<Op extends Operation, R extends Result
  */
 export class TrebizondServer<Op extends Operation, R extends Result> extends BaseTrebizondServer<Op, R> {
 
-    private currentLeaderId: number = 0;
-    private currentStage: number = 0;
+    private currentLeaderId = 0;
+    private currentStage = 0;
     private votesRegistry = new Map<number, Map<number, SignedObject<LeadershipVote>>>();
 
     private clientLastOp = new Map<number, TrebizondResult<R>>();
@@ -269,7 +269,7 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
                 } else {
 
                     // New write operation client request received
-                    let opInit: Init<Op> = {
+                    const opInit: Init<Op> = {
                         type: 'Init',
                         currentStatus: hashObject(this.log),
                         operation: operation,
@@ -315,7 +315,7 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
         if (leadership.leader.vote === leadership.from
                 && leadership.leader.epoque >= this.currentStage
                 && leadership.votes.size >= this.upperBoundThreshold()) {
-            let vote: LeadershipVote = {
+            const vote: LeadershipVote = {
                 type: 'LeadershipVote',
                 vote: leadership.leader.vote,
                 epoque: leadership.leader.epoque,
@@ -324,8 +324,8 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
             var nVotes = 0;
             leadership.votes.forEach((value: Uint8Array, key: number) => {
                 vote.from = key;
-                let voteHash = hashObject(leadership.leader);
-                let sourceKey = this.peerKeys.get(key);
+                const voteHash = hashObject(leadership.leader);
+                const sourceKey = this.peerKeys.get(key);
                 if (sourceKey && decryptText(value, sourceKey) == voteHash) {
                     nVotes++;
                 }
@@ -409,7 +409,7 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
                         .init.set(initMsg.from, initMsg);
             }
         } else {
-            let opLog: AtomicBroadcastMessageLog<Op, R> = {
+            const opLog: AtomicBroadcastMessageLog<Op, R> = {
                 init:  new Map<number, Init<Op>>(),
                 echo:  new Map<number, Echo<Op>>(),
                 ready: new Map<number, Ready<Op>>(),
@@ -441,7 +441,7 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
                         .echo.set(echoMsg.from, echoMsg);
             }
         } else {
-            let opLog: AtomicBroadcastMessageLog<Op, R> = {
+            const opLog: AtomicBroadcastMessageLog<Op, R> = {
                 init:  new Map<number, Init<Op>>(),
                 echo:  new Map<number, Echo<Op>>(),
                 ready: new Map<number, Ready<Op>>(),
@@ -474,7 +474,7 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
                         .ready.set(readyMsg.from, readyMsg);
             }
         } else {
-            let opLog: AtomicBroadcastMessageLog<Op, R> = {
+            const opLog: AtomicBroadcastMessageLog<Op, R> = {
                 init:  new Map<number, Init<Op>>(),
                 echo:  new Map<number, Echo<Op>>(),
                 ready: new Map<number, Ready<Op>>(),
@@ -510,9 +510,9 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
                 && (this.messagesLog.get(opId)!.init.size  >= 1
                 ||  this.messagesLog.get(opId)!.echo.size  >= (this.nReplicas + this.lowerBoundThreshold()) / 2
                 ||  this.messagesLog.get(opId)!.ready.size >= this.lowerBoundThreshold() + 1)) {
-            let op = this.getOperationFromLog(opId);
+            const op = this.getOperationFromLog(opId);
             if (op) {
-                let newEchoMsg: Echo<Op> = {
+                const newEchoMsg: Echo<Op> = {
                     type: 'Echo',
                     currentStatus: hashObject(this.log),
                     operation: op,
@@ -536,9 +536,9 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
                 && !this.messagesLog.get(opId)!.ready.has(this.id)
                 && (this.messagesLog.get(opId)!.echo.size  >= (this.nReplicas + this.lowerBoundThreshold()) / 2
                 ||  this.messagesLog.get(opId)!.ready.size >= this.lowerBoundThreshold() + 1)) {
-            let op = this.getOperationFromLog(opId);
+            const op = this.getOperationFromLog(opId);
             if (op) {
-                let newReadyMsg: Ready<Op> = {
+                const newReadyMsg: Ready<Op> = {
                     type: 'Ready',
                     currentStatus: hashObject(this.log),
                     operation: op,
@@ -571,7 +571,7 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
             var recipient = op.value.operation.broadcast ? op.value.from : this.currentLeaderId;
             this.messagesLog.get(opId)!.accepted.push(opId);
             this.stateMachine.executeOperation(op.value.operation.operation).then((result: R) => {
-                let trebizondResult: TrebizondResult<R> = {
+                const trebizondResult: TrebizondResult<R> = {
                     result: result,
                     opUuid: op!.value.operation.uuid
                 };
@@ -671,17 +671,17 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
         var max = 0;
 
         var auxReplies = new Map<string, [number, R]>();
-        for (let r of singleReplies.values()) {
-            let hash = hashObject(r.result.value.result);
+        for (const r of singleReplies.values()) {
+            const hash = hashObject(r.result.value.result);
             if (auxReplies.has(hash)) {
-                let replyCount = auxReplies.get(hash)!;
+                const replyCount = auxReplies.get(hash)!;
                 auxReplies.set(hash, [replyCount[0] + 1, replyCount[1]]);
             } else {
                 auxReplies.set(hash, [1, r.result.value.result]);
             }
         }
 
-        for (let r of auxReplies.values()) {
+        for (const r of auxReplies.values()) {
             if (r[0] > max) {
                 result = r[1];
                 max = r[0];
@@ -697,8 +697,8 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
         var resultHash = hashObject(result[0]);
 
         var resultAcknowledgments = new Map<number, Uint8Array>();
-        for (let replica of singleReplies.keys()) {
-            let reply = singleReplies.get(replica)!;
+        for (const replica of singleReplies.keys()) {
+            const reply = singleReplies.get(replica)!;
             if (hashObject(reply.result.value.result) === resultHash) {
                 resultAcknowledgments.set(replica, reply.result.signature);
             }
@@ -716,7 +716,7 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
     }
 
     instanceofCollectiveReply(obj: object): obj is CollectiveReply<R> {
-        return obj.hasOwnProperty('type') && (obj as any)['type'] === 'CollectiveReply';
+        return !!Object.getOwnPropertyDescriptor(obj, 'type') && (obj as any)['type'] === 'CollectiveReply';
     }
 }
 
@@ -726,7 +726,7 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
  */
 export class OperableTrebizondServer<Op extends Operation, R extends Result> extends TrebizondServer<Op, R> {
 
-    stopped: boolean = false;
+    stopped = false;
 
     constructor(serverId: number, topologyPeers: Map<number, string>,
             peerKeys: Map<number, string>, clientKeys: Map<number, string>,

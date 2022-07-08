@@ -81,7 +81,7 @@ export abstract class NetworkController {
         var ids: Array<string> = [];
         var msgType: string;
         var uuid: string;
-        var n: number = 0;
+        let n = 0;
         while (marshall[n].length > 0) {
             ids.push(marshall[n++].toString());
         }
@@ -200,7 +200,7 @@ export class ServerNetworkController extends NetworkController {
         this.routerSocket = zeromq.socket('router');
         //this.routerSocket.setsocketopt(/* ZMQ_ROUTER_MANDATORY */ 33, 1);
         this.routerSocket.on('error', this.manageDeliveryError.bind(this));
-        for (let peer of topologyPeers.values()) {
+        for (const peer of topologyPeers.values()) {
             this.routerSocket.connect(NetworkController.PROTOCOL_PREFIX + peer);
             console.log('Connected to endpoint ' + peer);
         }
@@ -211,7 +211,7 @@ export class ServerNetworkController extends NetworkController {
         this.setOnMessageCallback(onMessageCallback);
 
         resolveHostnameToNetworkAddress(internalEndpoint).then((endpointAddress: string) => {
-            let networkInterface: string = identifyEndpointInterface(endpointAddress);
+            const networkInterface: string = identifyEndpointInterface(endpointAddress);
             console.log('Internal endpoint ' + internalEndpoint +
                 ' (' + endpointAddress + ') maps to network interface ' + networkInterface);
             this.dealerSocket.bindSync(NetworkController.PROTOCOL_PREFIX + endpointAddress);
@@ -225,7 +225,7 @@ export class ServerNetworkController extends NetworkController {
             this.setOnRequestCallback(onRequestCallback);
 
             resolveHostnameToNetworkAddress(externalEndpoint).then((endpointAddress: string) => {
-                let networkInterface = identifyEndpointInterface(endpointAddress);
+                const networkInterface = identifyEndpointInterface(endpointAddress);
                 console.log('External endpoint ' + externalEndpoint +
                     ' (' + endpointAddress + ') maps to network interface ' + networkInterface);
                 this.replySocket.bind(NetworkController.PROTOCOL_PREFIX + endpointAddress);
@@ -251,9 +251,9 @@ export class ServerNetworkController extends NetworkController {
      * @param to Identifiers of the request's recipients
      */
     public sendMulticast(msg: Message, to: number[]): void {
-        for (let recipient of to) {
+        to.forEach((recipient) => {
             this.sendMessage(msg, recipient);
-        }
+        });
     }
 
     /**
@@ -278,8 +278,8 @@ export class ServerNetworkController extends NetworkController {
     /**
      * @inheritDoc
      */
-    protected dispatchMessage(): void {
-        var message: Envelope<Message> = this.unmarshallMessage(Array.prototype.slice.call(arguments));
+    protected dispatchMessage(...args: string[]): void {
+        const message: Envelope<Message> = this.unmarshallMessage(args);
         console.log('Server ' + message.ids[message.ids.length - 1] + ': Received message of type ' + message.type + ' from ' + message.ids[0]);
 
         // Check message validity before dispatching it
@@ -301,8 +301,8 @@ export class ServerNetworkController extends NetworkController {
     /**
      * @inheritDoc
      */
-    protected dispatchOpRequest(): void {
-        var message: SignedObject<OpMessage<any>> = JSON.parse(Array.prototype.slice.call(arguments).toString());
+    protected dispatchOpRequest(...args: string[]): void {
+        const message: SignedObject<OpMessage<any>> = JSON.parse(args.toString());
         console.log('Server ' + this.id + ': Received operation request message from client ' + message.value.from);
 
         // Check message validity before dispatching it
@@ -323,8 +323,8 @@ export class ServerNetworkController extends NetworkController {
     /**
      * Manages an error in the delivery of a message across the network.
      */
-    protected manageDeliveryError() {
-        var message = this.unmarshallMessage(Array.prototype.slice.call(arguments));
+    protected manageDeliveryError(...args: string[]): void {
+        const message = this.unmarshallMessage(args);
         console.log('Server ' + message.ids[0] + ': Failed to send message of type ' + message.type + ' to ' + message.ids[message.ids.length - 1]);
     }
 }
@@ -357,9 +357,9 @@ function resolveHostnameToNetworkAddress(endpoint: string): Promise<string> {
 function identifyEndpointInterface(endpoint: string): string {
     var endpointInterface: string = endpoint;
     var osNetworkInterfaces = networkInterfaces();
-    for (let nwif in osNetworkInterfaces) {
-        for (let nwAddr of osNetworkInterfaces[nwif]) {
-            let address: string = nwAddr.address;
+    for (const nwif in osNetworkInterfaces) {
+        for (const nwAddr of osNetworkInterfaces[nwif]) {
+            const address = nwAddr.address;
             if (endpoint.startsWith(address)) {
                 endpointInterface = nwif;
                 break;
@@ -497,7 +497,7 @@ export class SynchronousServerNetworkController extends ServerNetworkController
      */
     public sendMulticastSync(req: Message, to: number[], timeout?: number): QPromise<Envelope<Reply>>[] {
         var p: Array<QPromise<Envelope<Reply>>> = [];
-        for (let recipient of to) {
+        for (const recipient of to) {
             p.push(this.sendMessageSync(req, recipient, timeout));
         }
         return p;
@@ -515,7 +515,7 @@ export class SynchronousServerNetworkController extends ServerNetworkController
      */
     public sendReply(msg: Reply, to: number): void {
         console.log('Server ' + this.id + ' replies with ' + msg.type + ' message to ' + to);
-        var marshalled = this.marshallMessage(signObject(msg, this.peerKeys.get(this.id)!) as SignedObject<Reply>, this.id, to, msg.serialUUID);
+        const marshalled = this.marshallMessage(signObject(msg, this.peerKeys.get(this.id)!) as SignedObject<Reply>, this.id, to, msg.serialUUID);
         marshalled.unshift(to.toString());
         this.routerSocket.send(marshalled);
     }
@@ -523,8 +523,8 @@ export class SynchronousServerNetworkController extends ServerNetworkController
     /**
      * @inheritDoc
      */
-    protected dispatchMessage(): void {
-        var message = this.unmarshallMessage(Array.prototype.slice.call(arguments));
+    protected dispatchMessage(...args: string[]): void {
+        const message = this.unmarshallMessage(args);
         console.log('Server' + message.ids[message.ids.length - 1] + ': Received message of type ' + message.type + ' from ' + message.ids[0]);
 
         // Check message validity before dispatching it
@@ -559,8 +559,8 @@ export class SynchronousServerNetworkController extends ServerNetworkController
     /**
      * @inheritDoc
      */
-    protected manageDeliveryError() {
-        var message = this.unmarshallMessage(Array.prototype.slice.call(arguments));
+    protected manageDeliveryError(...args: string[]): void {
+        const message = this.unmarshallMessage(args);
         console.log('Server ' + message.ids[0] + ': Failed to send message of type ' + message.type + ' to ' + message.ids[message.ids.length - 1]);
         var p = this.pendingReplies.get(message.serialUUID);
         if (p != null && p.isPending()) {
