@@ -1,12 +1,12 @@
 /**
  * Trebizond - Byzantine consensus algorithm for permissioned blockchain systems
- * 
+ *
  * Byzantine Consensus and Blockchain
  * Master Degree in Parallel and Distributed Computing
  * Polytechnic University of Valencia
- * 
+ *
  * Javier Fernández-Bravo Peñuela
- * 
+ *
  * redis-state-machine/redisCommand.ts
  */
 
@@ -15,8 +15,6 @@ import { Operation,
 import { StateMachine } from '../state-machine-connector/command';
 import { RedisMessageValidator } from './redisMessageValidator';
 import { Deferred as QPromise } from '../trebizond-common/deferred';
-import { convertMapToArray,
-         convertObjectToArray } from '../trebizond-common/util';
 import * as Redis from 'ioredis';
 
 interface RedisCommand {
@@ -38,7 +36,7 @@ export class RedisOperation extends Operation implements RedisCommand {
     }
 
     public isReadOperation(): boolean {
-        return this.operator == RedisOperator.check;
+        return this.operator === RedisOperator.check;
     }
 }
 
@@ -75,12 +73,12 @@ export class RedisStateMachine extends StateMachine<RedisOperation, RedisResult>
     }
 
     public async executeOperation(op: RedisOperation): Promise<RedisResult> {
-        var p = new QPromise<RedisResult>();
-        var newValue: number;
-        if (op.operator == RedisOperator.assign) {
+        const p = new QPromise<RedisResult>();
+        let newValue: number;
+        if (op.operator === RedisOperator.assign) {
             newValue = op.value;
         } else {
-            var oldValue = Number(await this.redis.get(op.key));
+            const oldValue = Number(await this.redis.get(op.key));
             switch (op.operator) {
                 case RedisOperator.add:
                     newValue = oldValue + op.value;
@@ -98,7 +96,7 @@ export class RedisStateMachine extends StateMachine<RedisOperation, RedisResult>
                     newValue = op.value;
             }
         }
-        if (RedisOperator.check != op.operator) {
+        if (RedisOperator.check !== op.operator) {
             this.redis.set(op.key, newValue);
             console.log('Operation committed: ' + op.key + op.operator + op.value);
         }
@@ -111,13 +109,13 @@ export class RedisStateMachine extends StateMachine<RedisOperation, RedisResult>
         return p.promise;
     }
 
-    public applyOperation(op: RedisOperation, callback: (result: RedisResult) => any): void {
+    public applyOperation(op: RedisOperation, callback: (result: RedisResult) => void): void {
         this.executeOperation(op).then(callback);
     }
-    
+
     public async getSnapshot(): Promise<Map<string, number>> {
-        var p = new QPromise<Map<string, number>>();
-        this.redis.hgetall('*', (err: Error, result: any) => {
+        const p = new QPromise<Map<string, number>>();
+        this.redis.hgetall('*', (err: Error|null, result: Record<string, string>) => {
             if (err !== null && err !== undefined
                 && (result === null || result === undefined)) {
                     p.reject(err);
@@ -139,20 +137,16 @@ export class RedisStateMachine extends StateMachine<RedisOperation, RedisResult>
     private setArgumentTransformer(): void {
         Redis.Command.setArgumentTransformer('hmset', function(args) {
             if (args.length === 2) {
-                if (typeof Map !== 'undefined' && args[1] instanceof Map) {
-                    return [args[0]].concat(convertMapToArray(args[1]));
-                }
-                if (typeof args[1] === 'object' && args[1] !== null) {
-                    return [args[0]].concat(convertObjectToArray(args[1]));
-                }
+                const [key, values] = args;
+                return [key].concat(Array.isArray(values) ? values.flat() : values);
             }
             return args;
         });
 
-        Redis.Command.setReplyTransformer('hgetall', function(result) {
+        Redis.Command.setReplyTransformer('hgetall', function(result: string[]) {
             if (Array.isArray(result)) {
-                var obj: any = {};
-                for (var i = 0; i < result.length; i += 2) {
+                const obj: Record<string, string> = {};
+                for (let i = 0; i < result.length; i+=2) {
                     obj[result[i]] = result[i + 1];
                 }
                 return obj;

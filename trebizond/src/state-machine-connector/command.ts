@@ -1,12 +1,12 @@
 /**
  * Trebizond - Byzantine consensus algorithm for permissioned blockchain systems
- * 
+ *
  * Byzantine Consensus and Blockchain
  * Master Degree in Parallel and Distributed Computing
  * Polytechnic University of Valencia
- * 
+ *
  * Javier Fernández-Bravo Peñuela
- * 
+ *
  * state-machine-connector/command.ts
  */
 
@@ -27,11 +27,11 @@ export abstract class StateMachine<Op extends Operation, R extends Result> {
 
     public abstract executeOperation(operation: Op): Promise<R>;
 
-    public abstract applyOperation(operation: Op, callback: (result: R) => any): void;
+    public abstract applyOperation(operation: Op, callback: (result: R) => void): void;
 
-    public abstract getSnapshot(): any;
+    public abstract getSnapshot(): Promise<Map<string, number>>;
 
-    public abstract setSnapshot(snapshot: any): void;
+    public abstract setSnapshot(snapshot: Map<string, number>): void;
 
     public getMessageValidator(): MessageValidator<Op> {
         return this.msgValidator;
@@ -45,7 +45,7 @@ export abstract class StateMachine<Op extends Operation, R extends Result> {
 export class BlockChain<Op extends Operation, R extends Result> {
 
     private log: Array<SignedObject<Block<Op, R>>> = [];
-    
+
     public getBlockchainLog(): Array<SignedObject<Block<Op, R>>> {
         return this.log;
     }
@@ -61,8 +61,8 @@ export class BlockChain<Op extends Operation, R extends Result> {
     }
 
     public appendNextBlock(operation: Op, result: R, privateKey: string): SignedObject<Block<Op, R>> {
-        var signedBlock =
-            signObject(this.generateNextBlock(operation, result), privateKey) as SignedObject<Block<Op, R>>;
+        const signedBlock = signObject(
+            this.generateNextBlock(operation, result), privateKey) as SignedObject<Block<Op, R>>;
         this.getBlockchainLog().push(signedBlock);
         return signedBlock;
     }

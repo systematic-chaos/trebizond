@@ -1,20 +1,19 @@
 /**
  * Trebizond - Byzantine consensus algorithm for permissioned blockchain systems
- * 
+ *
  * Byzantine Consensus and Blockchain
  * Master Degree in Parallel and Distributed Computing
  * Polytechnic University of Valencia
- * 
+ *
  * Javier Fernández-Bravo Peñuela
- * 
+ *
  * trebizond-server/failureDetector.ts
  */
 
 import { Accusation,
          Message,
          Operation,
-         OpMessage,
-         TrebizondOperation } from '../trebizond-common/datatypes';
+         OpMessage } from '../trebizond-common/datatypes';
 import { ServerNetworkController } from './networkController';
 import { checkObjectSignature,
          SignedObject } from '../trebizond-common/crypto';
@@ -28,7 +27,7 @@ export class FailureDetector<Op extends Operation> {
     private validator: MessageValidator<Op>;
     private suspectNodes: Array<number>;
 
-    private onMessageRedirect!: (message: SignedObject<Message>) => void|any;
+    private onMessageRedirect!: (message: SignedObject<Message>) => void;
     private onRequestRedirect!: (request: SignedObject<OpMessage<Op>>) => void;
 
     constructor(replicaId: number, peersPublicKeys: Map<number, string>,
@@ -52,8 +51,7 @@ export class FailureDetector<Op extends Operation> {
 
     protected authenticationValidation(message: SignedObject<Message>): boolean {
         return this.peerKeys.has(message.value.from) ?
-            checkObjectSignature(message, this.peerKeys.get(message.value.from)!)
-                : false;
+            checkObjectSignature(message, this.peerKeys.get(message.value.from)) : false;
     }
 
     protected semanticValidation(message: Message): boolean {
@@ -80,7 +78,7 @@ export class FailureDetector<Op extends Operation> {
      * and it fails semantic validation, encapsulate it into an accusation message
      * and broadcast accusation to all other replicas.
      */
-    public onMessage(msg: SignedObject<Message>) {
+    public onMessage(msg: SignedObject<Message>): void {
 
         if (this.instanceOfOperationMessage(msg.value)) {
             if (this.authenticationValidation(msg)) {
@@ -93,7 +91,7 @@ export class FailureDetector<Op extends Operation> {
                         message: msg as SignedObject<OpMessage<Op>>
                     };
                     this.networkController.sendBroadcast(accusation);
-                    if (this.suspectNodes.indexOf(msg.value.from) != -1) {
+                    if (this.suspectNodes.indexOf(msg.value.from) >= 0) {
                         this.suspectNodes.push(msg.value.from);
                     }
                 }
@@ -109,23 +107,27 @@ export class FailureDetector<Op extends Operation> {
      * it is redirected to the application protocol.
      * Otherwise, it is discarded.
      */
-    public onRequest(request: SignedObject<OpMessage<any>>) {
+    public onRequest(request: SignedObject<OpMessage<Op>>): void {
         if (this.validator.semanticValidation(request.value.operation.operation)) {
             this.onRequestRedirect(request);
         }
     }
-    
-    instanceOfAccusation(object: Message): object is Accusation<Op> {
+
+    private instanceOfAccusation(object: Message): object is Accusation<Op> {
         return object.type === 'Accusation' && !!Object.getOwnPropertyDescriptor(object, 'message');
     }
-    
-    instanceOfOperationMessage(object: Message): object is OpMessage<Op> {
-        if (!Object.getOwnPropertyDescriptor(object, 'operation'))
+
+    private instanceOfOperationMessage(object: Message): object is OpMessage<Op> {
+        if (!Object.getOwnPropertyDescriptor(object, 'operation')) {
             return false;
-        var outerOp: TrebizondOperation<any> = (object as OpMessage<any>).operation;
-        if (!Object.getOwnPropertyDescriptor(outerOp, 'operation'))
+        }
+
+        const outerOp = (object as OpMessage<Op>).operation;
+        if (!Object.getOwnPropertyDescriptor(outerOp, 'operation')) {
             return false;
-        var innerOp: any = outerOp.operation;
+        }
+
+        const innerOp = outerOp.operation;
         return innerOp instanceof Operation;
     }
 }

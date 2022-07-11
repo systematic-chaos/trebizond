@@ -1,17 +1,16 @@
 /**
  * Trebizond - Byzantine consensus algorithm for permissioned blockchain systems
- * 
+ *
  * Byzantine Consensus and Blockchain
  * Master Degree in Parallel and Distributed Computing
  * Polytechnic University of Valencia
- * 
+ *
  * Javier Fernández-Bravo Peñuela
- * 
+ *
  * trebizond-common/datatypes.ts
  */
 
-import { SignedText,
-         SignedObject } from './crypto';
+import { SignedObject } from './crypto';
 
 export interface Message {
     type: string;

@@ -1,20 +1,20 @@
 /**
  * Trebizond - Byzantine consensus algorithm for permissioned blockchain systems
- * 
+ *
  * Byzantine Consensus and Blockchain
  * Master Degree in Parallel and Distributed Computing
  * Polytechnic University of Valencia
- * 
+ *
  * Javier Fernández-Bravo Peñuela
- * 
+ *
  * trebizond-server/networkController.ts
  */
 
 import { Message,
          Envelope,
          OpMessage,
-         SignedOpMessage,
-         Reply } from '../trebizond-common/datatypes';
+         Reply,
+         Operation } from '../trebizond-common/datatypes';
 import { checkObjectSignature,
          signObject,
          SignedObject } from '../trebizond-common/crypto';
@@ -59,10 +59,10 @@ export abstract class NetworkController {
      *              its sending by means of a ZeroMQ socket
      */
     marshallMessage(msg: SignedObject<Message>, from: number, to?: number, uuid: string = uuidv4()): string[] {
-        var marshall: Array<string> = [];
+        const marshall: string[] = [];
         marshall.push('');
         marshall.push(from.toString());
-        marshall.push(to != null ? to.toString(): '');
+        marshall.push(to ? to.toString() : '');
         marshall.push(msg.value.type);
         marshall.push(uuid);
         marshall.push(JSON.stringify(msg));
@@ -77,10 +77,7 @@ export abstract class NetworkController {
      *              contains data related to its delivery
      */
     unmarshallMessage(marshall: string[]): Envelope<Message> {
-        var msg: SignedObject<Message>;
-        var ids: Array<string> = [];
-        var msgType: string;
-        var uuid: string;
+        const ids: string[] = [];
         let n = 0;
         while (marshall[n].length > 0) {
             ids.push(marshall[n++].toString());
@@ -88,16 +85,15 @@ export abstract class NetworkController {
         ids.reverse();
         ids.unshift(marshall[++n].toString());
         ids.push(marshall[++n].toString());
-        msgType = marshall[++n].toString();
-        uuid = marshall[++n].toString();
-        msg = JSON.parse(marshall[++n].toString());
-        var envelope: Envelope<Message> = {
-            ids: ids,
+        const msgType = marshall[++n].toString();
+        const uuid = marshall[++n].toString();
+        const msg: SignedObject<Message> = JSON.parse(marshall[++n].toString());
+        return {
+            ids,
             type: msgType,
             serialUUID: uuid,
-            msg: msg
+            msg
         };
-        return envelope;
     }
 
     protected static readonly TRANSPORT_PROTOCOL: string = 'tcp';
@@ -160,8 +156,8 @@ export class ServerNetworkController extends NetworkController {
      * function provided by the server instantiating this controller,
      * to be called when a request message from another server is received
      */
-    protected onMessageCallback!: (message: SignedObject<Message>) => void|any;
-    protected onRequestCallback!: (message: SignedObject<OpMessage<any>>) => void|any;
+    protected onMessageCallback!: (message: SignedObject<Message>) => void;
+    protected onRequestCallback!: (message: SignedObject<OpMessage<Operation>>) => void;
 
     /**
      * NetworkController class constructor
@@ -180,8 +176,8 @@ export class ServerNetworkController extends NetworkController {
             peerKeys: Map<number, string>,
             clientKeys: Map<number, string>,
             externalEndpoint: string,
-            onMessageCallback: (message: SignedObject<Message>) => void|any,
-            onRequestCallback: (message: SignedObject<OpMessage<any>>) => void|any) {
+            onMessageCallback: (message: SignedObject<Message>) => void,
+            onRequestCallback:(message: SignedObject<OpMessage<Operation>>) => void) {
         super();
         this.id = id;
         this.topologyPeers = topologyPeers;
@@ -193,8 +189,8 @@ export class ServerNetworkController extends NetworkController {
     }
 
     private bindInternalSockets(topologyPeers: Map<number, string>,
-            onMessageCallback: (msg: SignedObject<Message>) => void|any): void {
-        var internalEndpoint: string = this.topologyPeers.get(this.id)!;
+            onMessageCallback: (msg: SignedObject<Message>) => void): void {
+        const internalEndpoint = this.topologyPeers.get(this.id);
         this.topologyPeers.delete(this.id);
 
         this.routerSocket = zeromq.socket('router');
@@ -219,17 +215,17 @@ export class ServerNetworkController extends NetworkController {
     }
 
     private bindExternalSocket(externalEndpoint: string,
-        onRequestCallback: (msg: SignedObject<OpMessage<any>>) => void|any): void {
-            this.replySocket = zeromq.socket('rep');
-            this.replySocket.on('message', this.dispatchOpRequest.bind(this));
-            this.setOnRequestCallback(onRequestCallback);
+            onRequestCallback: (msg: SignedObject<OpMessage<Operation>>) => void): void {
+        this.replySocket = zeromq.socket('rep');
+        this.replySocket.on('message', this.dispatchOpRequest.bind(this));
+        this.setOnRequestCallback(onRequestCallback);
 
-            resolveHostnameToNetworkAddress(externalEndpoint).then((endpointAddress: string) => {
-                const networkInterface = identifyEndpointInterface(endpointAddress);
-                console.log('External endpoint ' + externalEndpoint +
-                    ' (' + endpointAddress + ') maps to network interface ' + networkInterface);
-                this.replySocket.bind(NetworkController.PROTOCOL_PREFIX + endpointAddress);
-            });
+        resolveHostnameToNetworkAddress(externalEndpoint).then((endpointAddress: string) => {
+            const networkInterface = identifyEndpointInterface(endpointAddress);
+            console.log('External endpoint ' + externalEndpoint +
+                ' (' + endpointAddress + ') maps to network interface ' + networkInterface);
+            this.replySocket.bind(NetworkController.PROTOCOL_PREFIX + endpointAddress);
+        });
     }
 
     /**
@@ -237,8 +233,8 @@ export class ServerNetworkController extends NetworkController {
      */
     public sendMessage(msg: Message, to: number): void {
         console.log('Server ' + this.id + ' sending ' + msg.type + ' message to ' + to);
-        var signed = signObject(msg, this.peerKeys.get(this.id)!) as SignedObject<Message>;
-        var marshalled = this.marshallMessage(signed, this.id, to);
+        const signed = signObject(msg, this.peerKeys.get(this.id)) as SignedObject<Message>;
+        const marshalled = this.marshallMessage(signed, this.id, to);
         marshalled.unshift(to.toString());
 
         this.routerSocket.send(marshalled);
@@ -271,7 +267,7 @@ export class ServerNetworkController extends NetworkController {
      */
     public replyClientOperation(msg: Message): void {
         console.log('Server ' + this.id + ' sending ' + msg.type + ' reply message to client');
-        var signed = signObject(msg, this.peerKeys.get(this.id)!) as SignedObject<Message>;
+        const signed = signObject(msg, this.peerKeys.get(this.id)) as SignedObject<Message>;
         this.replySocket.send(JSON.stringify(signed));
     }
 
@@ -283,18 +279,18 @@ export class ServerNetworkController extends NetworkController {
         console.log('Server ' + message.ids[message.ids.length - 1] + ': Received message of type ' + message.type + ' from ' + message.ids[0]);
 
         // Check message validity before dispatching it
-        var sourceKey = this.peerKeys.get(message.msg.value.from);
+        const sourceKey = this.peerKeys.get(message.msg.value.from);
         if (sourceKey && checkObjectSignature(message.msg, sourceKey)
                 && message.type === message.msg.value.type) {
             this.onMessageCallback(message.msg);
         }
     }
 
-    public getOnMessageCallback(): (message: SignedObject<Message>) => void|any {
+    public getOnMessageCallback(): (message: SignedObject<Message>) => void {
         return this.onMessageCallback;
     }
 
-    public setOnMessageCallback(onMessage: (msg: SignedObject<Message>) => void|any) {
+    public setOnMessageCallback(onMessage: (msg: SignedObject<Message>) => void) {
         this.onMessageCallback = onMessage;
     }
 
@@ -302,21 +298,21 @@ export class ServerNetworkController extends NetworkController {
      * @inheritDoc
      */
     protected dispatchOpRequest(...args: string[]): void {
-        const message: SignedObject<OpMessage<any>> = JSON.parse(args.toString());
+        const message: SignedObject<OpMessage<Operation>> = JSON.parse(args.toString());
         console.log('Server ' + this.id + ': Received operation request message from client ' + message.value.from);
 
         // Check message validity before dispatching it
-        var sourceKey = this.peerKeys.get(message.value.from);
+        const sourceKey = this.peerKeys.get(message.value.from);
         if (sourceKey && checkObjectSignature(message, sourceKey)) {
             this.onRequestCallback(message);
         }
     }
 
-    public getOnRequestCallback(): (msg: SignedObject<OpMessage<any>>) => void|any {
+    public getOnRequestCallback(): (msg: SignedObject<OpMessage<Operation>>) => void {
         return this.onRequestCallback;
     }
 
-    public setOnRequestCallback(onRequest: (msg: SignedObject<OpMessage<any>>) => void|any) {
+    public setOnRequestCallback(onRequest: (msg: SignedObject<OpMessage<Operation>>) => void) {
         this.onRequestCallback = onRequest;
     }
 
@@ -330,7 +326,7 @@ export class ServerNetworkController extends NetworkController {
 }
 
 function resolveHostnameToNetworkAddress(endpoint: string): Promise<string> {
-    var p = new QPromise<string>();
+    const p = new QPromise<string>();
 
     let i: number;
     let endpointPort: number;
@@ -355,8 +351,8 @@ function resolveHostnameToNetworkAddress(endpoint: string): Promise<string> {
 }
 
 function identifyEndpointInterface(endpoint: string): string {
-    var endpointInterface: string = endpoint;
-    var osNetworkInterfaces = networkInterfaces();
+    let endpointInterface = endpoint;
+    const osNetworkInterfaces = networkInterfaces();
     for (const nwif in osNetworkInterfaces) {
         for (const nwAddr of osNetworkInterfaces[nwif]) {
             const address = nwAddr.address;
@@ -393,7 +389,7 @@ export interface SynchronousNetworkController {
     sendMessageSync(req: Message, to: number, timeout?: number): QPromise<Envelope<Reply>>;
 
     /**
-     * Sends a request message of any type to a subset 
+     * Sends a request message of any type to a subset
      * of peer servers in the cluster.
      * @param req Request message to be sent
      * @param to Identifiers of the request message's recipients
@@ -459,8 +455,8 @@ export class SynchronousServerNetworkController extends ServerNetworkController
     constructor(id: number, topologyPeers: Map<number, string>,
             peerKeys: Map<number, string>, clientKeys: Map<number, string>,
             externalEndpoint: string,
-            onMessageCallback: (message: SignedObject<Message>) => void|any,
-            onCommandCallback: (message: SignedObject<OpMessage<any>>) => void|any) {
+            onMessageCallback: (message: SignedObject<Message>) => void,
+            onCommandCallback: (message: SignedObject<OpMessage<Operation>>) => void) {
         super(id, topologyPeers, peerKeys, clientKeys, externalEndpoint, onMessageCallback, onCommandCallback);
         this.pendingReplies = new Map<string, QPromise<Envelope<Reply>>>();
     }
@@ -470,15 +466,15 @@ export class SynchronousServerNetworkController extends ServerNetworkController
      */
     public sendMessageSync(req: Message, to: number, timeout?: number): QPromise<Envelope<Reply>> {
         console.log('Server ' + this.id + ' sending ' + req.type + ' message to ' + to);
-        var signed = signObject(req, this.peerKeys.get(this.id)!) as SignedObject<Message>;
-        var marshalled = this.marshallMessage(signed, this.id, to);
+        const signed = signObject(req, this.peerKeys.get(this.id)) as SignedObject<Message>;
+        const marshalled = this.marshallMessage(signed, this.id, to);
         marshalled.unshift(to.toString());
-        
-        var p = new QPromise<Envelope<Reply>>();
-        var envelopeSerialUUID = marshalled[marshalled.length - 2];
+
+        const p = new QPromise<Envelope<Reply>>();
+        const envelopeSerialUUID = marshalled[marshalled.length - 2];
         this.pendingReplies.set(envelopeSerialUUID, p);
-        
-        if (timeout != null) {
+
+        if (timeout) {
             setTimeout(() => {
                 if (!p.isResolved()) {
                     p.reject('Timeout exceeded');
@@ -486,9 +482,9 @@ export class SynchronousServerNetworkController extends ServerNetworkController
                 }
             }, timeout);
         }
-        
+
         this.routerSocket.send(marshalled);
-        
+
         return p;
     }
 
@@ -496,10 +492,8 @@ export class SynchronousServerNetworkController extends ServerNetworkController
      * @inheritDoc
      */
     public sendMulticastSync(req: Message, to: number[], timeout?: number): QPromise<Envelope<Reply>>[] {
-        var p: Array<QPromise<Envelope<Reply>>> = [];
-        for (const recipient of to) {
-            p.push(this.sendMessageSync(req, recipient, timeout));
-        }
+        const p: Array<QPromise<Envelope<Reply>>> = [];
+        to.forEach(recipient => p.push(this.sendMessageSync(req, recipient, timeout)));
         return p;
     }
 
@@ -515,11 +509,12 @@ export class SynchronousServerNetworkController extends ServerNetworkController
      */
     public sendReply(msg: Reply, to: number): void {
         console.log('Server ' + this.id + ' replies with ' + msg.type + ' message to ' + to);
-        const marshalled = this.marshallMessage(signObject(msg, this.peerKeys.get(this.id)!) as SignedObject<Reply>, this.id, to, msg.serialUUID);
+        const marshalled = this.marshallMessage(signObject(msg,
+            this.peerKeys.get(this.id)) as SignedObject<Reply>, this.id, to, msg.serialUUID);
         marshalled.unshift(to.toString());
         this.routerSocket.send(marshalled);
     }
-    
+
     /**
      * @inheritDoc
      */
@@ -528,9 +523,9 @@ export class SynchronousServerNetworkController extends ServerNetworkController
         console.log('Server' + message.ids[message.ids.length - 1] + ': Received message of type ' + message.type + ' from ' + message.ids[0]);
 
         // Check message validity before dispatching it
-        var sourceKey = this.peerKeys.get(message.msg.value.from);
+        const sourceKey = this.peerKeys.get(message.msg.value.from);
         if (sourceKey && checkObjectSignature(message.msg, sourceKey)
-                && message.type == message.msg.value.type) {
+                && message.type === message.msg.value.type) {
             if (!this.isReplyMessage(message)) {
                 this.onMessageCallback(message.msg);
             } else {
@@ -545,8 +540,8 @@ export class SynchronousServerNetworkController extends ServerNetworkController
      * the message received as the resolution parameter.
      */
     protected dispatchReplyMessage(message: Envelope<Reply>): void {
-        var p = this.pendingReplies.get(message.serialUUID);
-        if (p != null && p.isPending()) {
+        const p = this.pendingReplies.get(message.serialUUID);
+        if (p && p.isPending()) {
             p.resolve(message);
             this.pendingReplies.delete(message.serialUUID);
         }
@@ -562,8 +557,8 @@ export class SynchronousServerNetworkController extends ServerNetworkController
     protected manageDeliveryError(...args: string[]): void {
         const message = this.unmarshallMessage(args);
         console.log('Server ' + message.ids[0] + ': Failed to send message of type ' + message.type + ' to ' + message.ids[message.ids.length - 1]);
-        var p = this.pendingReplies.get(message.serialUUID);
-        if (p != null && p.isPending()) {
+        const p = this.pendingReplies.get(message.serialUUID);
+        if (p && p.isPending()) {
             p.reject('Delivery error');
             this.pendingReplies.delete(message.serialUUID);
         }

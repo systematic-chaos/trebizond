@@ -1,19 +1,19 @@
 /**
  * Trebizond - Byzantine consensus algorithm for permissioned blockchain systems
- * 
+ *
  * Byzantine Consensus and Blockchain
  * Master Degree in Parallel and Distributed Computing
  * Polytechnic University of Valencia
- * 
+ *
  * Javier Fernández-Bravo Peñuela
- * 
+ *
  * trebizond-common/crypto.ts
  */
 
-import sha2 = require('crypto-js/sha256');
-import aes = require('crypto-js/aes');
-import utf8 = require('crypto-js/enc-utf8');
-import nacl = require('tweetnacl-util');
+import sha2 from 'crypto-js/sha256';
+import aes from 'crypto-js/aes';
+import utf8 from 'crypto-js/enc-utf8';
+import nacl from 'tweetnacl-util';
 
 export function generateSignedDigestFromText(text: string, key: string): Uint8Array {
     return encryptText(hashText(text), key);
@@ -49,15 +49,15 @@ export function signObject(obj: object, key: string): SignedObject<object> {
 }
 
 export function checkTextSignature(signedtext: SignedText, key: string): boolean {
-    return hashText(signedtext.value) == decryptText(signedtext.signature, key);
+    return hashText(signedtext.value) === decryptText(signedtext.signature, key);
 }
 
 export function checkBytesSignature(signedbytes: SignedBytes, key: string): boolean {
-    return hashBytes(signedbytes.value) == decryptText(signedbytes.signature, key);
+    return hashBytes(signedbytes.value) === decryptText(signedbytes.signature, key);
 }
 
 export function checkObjectSignature(signedobject: SignedObject<object>, key: string): boolean {
-    return hashObject(signedobject.value) == decryptText(signedobject.signature, key);
+    return hashObject(signedobject.value) === decryptText(signedobject.signature, key);
 }
 
 interface Signed {
@@ -113,7 +113,7 @@ export function hashObject(obj: object): string {
 }
 
 export class Cipher {
-    
+
     private key: string;
 
     constructor(privatekey: string) {
@@ -124,11 +124,11 @@ export class Cipher {
         return generateSignedDigestFromText(text, this.key);
     }
 
-    public generateSignedDigestFromBytes(bytes: Uint8Array, key: string): Uint8Array {
+    public generateSignedDigestFromBytes(bytes: Uint8Array): Uint8Array {
         return generateSignedDigestFromBytes(bytes, this.key);
     }
 
-    public generateSignedDigestFromObject(obj: object, key: string): Uint8Array {
+    public generateSignedDigestFromObject(obj: object): Uint8Array {
         return generateSignedDigestFromObject(obj, this.key);
     }
 

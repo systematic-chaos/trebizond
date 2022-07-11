@@ -1,12 +1,12 @@
 /**
  * Trebizond - Byzantine consensus algorithm for permissioned blockchain systems
- * 
+ *
  * Byzantine Consensus and Blockchain
  * Master Degree in Parallel and Distributed Computing
  * Polytechnic University of Valencia
- * 
+ *
  * Javier Fernández-Bravo Peñuela
- * 
+ *
  * trebizond-client/trebizondClient.ts
  */
 
@@ -16,16 +16,14 @@ import { Cipher,
          decryptText,
          hashObject } from '../trebizond-common/crypto';
 import { Deferred as QPromise } from '../trebizond-common/deferred';
-import { every,
-         uuidv4 } from '../trebizond-common/util';
+import { uuidv4 } from '../trebizond-common/util';
 import { Message,
          LeaderRedirection,
          CollectiveReply,
          SingleReply,
          Operation,
          Result,
-         TrebizondOperation,
-         TrebizondResult } from '../trebizond-common/datatypes';
+         TrebizondOperation } from '../trebizond-common/datatypes';
 import * as zeromq from 'zeromq';
 
 export class TrebizondClient<Op extends Operation, R extends Result> {
@@ -44,10 +42,10 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
     private pendingOperations: Array<[TrebizondOperation<Op>, QPromise<R>]> = [];
     private currentOperation: [TrebizondOperation<Op>, QPromise<R>] | null = null;
     private currentLeaderId: number;
-    private unicastAttempts: number = 0;
+    private unicastAttempts = 0;
     private currentReplies: Map<number, R> = new Map<number, R>();
     private lastOperationResult: R | null = null;
-    private timerExpired: boolean = false;
+    private timerExpired = false;
 
     protected static readonly TRANSPORT_PROTOCOL: string = 'tcp';
     protected static readonly PROTOCOL_PREFIX: string = TrebizondClient.TRANSPORT_PROTOCOL + '://';
@@ -66,19 +64,19 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
         this.currentLeaderId = this.randomizeCurrentLeader();
     }
 
-    private connectToServers(serverTopology: Map<number, [string, any]>,
+    private connectToServers(serverTopology: Map<number, [string, string]>,
             requestSockets: Map<number, zeromq.Socket>): number {
-        serverTopology.forEach((value: [string, any], serverId: number) => {
+        serverTopology.forEach((value, serverId) => {
             if (!value[0].startsWith(TrebizondClient.PROTOCOL_PREFIX)) {
-                let serverEndpoint = TrebizondClient.PROTOCOL_PREFIX + value[0];
+                const serverEndpoint = TrebizondClient.PROTOCOL_PREFIX + value[0];
                 serverTopology.set(serverId, [serverEndpoint, value[1]]);
-                let serverSocket = zeromq.createSocket('req');
+                const serverSocket = zeromq.createSocket('req');
                 try {
                     serverSocket.connect(serverEndpoint);
                     console.log('Connected to cluster endpoint ' + serverId +
                         ' (' + serverEndpoint + ')');
-                    
-                    serverSocket.on('message', (msg: any) => {
+
+                    serverSocket.on('message', msg => {
                         this.dispatchServerMessage(JSON.parse(msg), serverId);
                     });
                     requestSockets.set(serverId, serverSocket);
@@ -92,14 +90,14 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
     }
 
     public sendCommand(command: Op): Promise<R> {
-        var operation = this.generateOperationFromCommand(command);
-        var p = new QPromise<R>();
+        const operation = this.generateOperationFromCommand(command);
+        const p = new QPromise<R>();
         this.pendingOperations.push([operation, p]);
 
         if (this.currentOperation === null) {
             this.processNextOperation();
         }
-        
+
         return p.promise;
     }
 
@@ -115,11 +113,11 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
     private processNextOperation(): void {
         if (this.currentOperation === null && this.pendingOperations.length > 0) {
             // First delivery attempt for the new current operation
-            this.currentOperation = this.pendingOperations.shift()!;
+            this.currentOperation = this.pendingOperations.shift();
             this.unicastAttempts = 0;
             this.lastOperationResult = null;
             this.timerExpired = false;
-            
+
             this.resetTimer(this.currentOperation[0]);
             this.unicastOperationRequest(this.currentOperation[0]);
             this.unicastAttempts++;
@@ -134,25 +132,25 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
          * bizantine. As a consequence, the current leader identifier is randomly
          * assigned and the current operation is broadcasted to all replicas.
          */
-        if (leadRedir.from == this.currentLeaderId
-            && leadRedir.leader == this.currentLeaderId
+        if (leadRedir.from === this.currentLeaderId
+            && leadRedir.leader === this.currentLeaderId
             && this.unicastAttempts >= 0
             && this.currentOperation !== null) {
                 this.unicastAttempts = -1;
                 this.randomizeCurrentLeader();
                 this.broadcastOperationRequest(this.currentOperation[0]);
         }
-        
+
         /**
          * The node suppossed to be the leader redirects to another node.
          * The current leader identifier is reassigned to the node indicated
          * by the (now) former leader.
          */
-        if (leadRedir.from == this.currentLeaderId
-            && leadRedir.leader != this.currentLeaderId) {
-                this.currentLeaderId = leadRedir.leader;
-                /*this.unicastAttempts++;*/
-            }
+        if (leadRedir.from === this.currentLeaderId
+                && leadRedir.leader !== this.currentLeaderId) {
+            this.currentLeaderId = leadRedir.leader;
+            //this.unicastAttempts++;
+        }
     }
 
     private processCollectiveReply(reply: CollectiveReply<R>) {
@@ -166,11 +164,11 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
         if (this.currentOperation !== null
                 && this.currentOperation[0].uuid === reply.result.opUuid) {
             this.currentLeaderId = reply.from;
-            var mainResult: TrebizondResult<R> = reply.result;
-            var mainResultHash = hashObject(mainResult);
+            const mainResult = reply.result;
+            const mainResultHash = hashObject(mainResult);
             if (reply.resultAcknowledgments.size >= (2 * this.nReplicas + 1) / 3
-                    && every(Array.from(reply.resultAcknowledgments),
-                            this.matchesResultDigest.bind(this), mainResultHash)) {
+                    && Array.from(reply.resultAcknowledgments).every(
+                        resultAck => this.matchesResultDigest(resultAck, mainResultHash))) {
                 this.resolveCurrentOperation(mainResult.result);
             }
         }
@@ -183,7 +181,7 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
          * The result wrapped by the reply message is stored.
          */
         if (this.currentOperation !== null
-                && this.currentOperation[0].uuid == reply.result.value.opUuid
+                && this.currentOperation[0].uuid === reply.result.value.opUuid
                 && !this.currentReplies.has(reply.from)) {
             this.currentReplies.set(reply.from, reply.result.value.result);
 
@@ -191,10 +189,10 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
              * Set minimum votes a result must gather in order to reach consensus,
              * depending on its nature as a read-only or a write-implying operation
              */
-            var consensusThreshold = this.currentOperation[0].operation.isReadOperation() ?
+            const consensusThreshold = this.currentOperation[0].operation.isReadOperation() ?
                     this.readOpConsensusThreshold()
                     : this.writeOpConsensusThreshold();
-            var consensusResult = this.enoughMatchingReplies(consensusThreshold);
+            const consensusResult = this.enoughMatchingReplies(consensusThreshold);
 
             /**
              * There exist a number of similar single replies to state that
@@ -204,7 +202,7 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
             if (consensusResult !== null) {
                 this.resolveCurrentOperation(consensusResult);
             }
-            
+
             /**
              * Current distribution of single replies disables to reach consensus
              * on a same result. All replies received are discarded and the current
@@ -220,27 +218,26 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
     }
 
     private matchesResultDigest(acknowledgment: [number, Uint8Array], mainHash?: string): boolean {
-        var source: number = acknowledgment[0];
-        var source: number = acknowledgment[0];
+        const source = acknowledgment[0];
         return this.serversTopology.has(source)
-                && mainHash === decryptText(acknowledgment[1], this.serversTopology.get(source)![1]);
+                && mainHash === decryptText(acknowledgment[1], this.serversTopology.get(source)[1]);
     }
-    
+
     private unicastOperationRequest(operation: TrebizondOperation<Op>): void {
-        var currentServerEndpoint: String = this.serversTopology.get(this.currentLeaderId)![0];
+        const currentServerEndpoint = this.serversTopology.get(this.currentLeaderId)[0];
         console.log('Sending operation to ' + this.currentLeaderId +
         '(' + currentServerEndpoint + ')');
         console.log(JSON.stringify(operation.operation));
-        var marshalledSignedOp = JSON.stringify(this.cipher.signObject(operation));
-        this.requestSockets.get(this.currentLeaderId)!.send(marshalledSignedOp);
+        const marshalledSignedOp = JSON.stringify(this.cipher.signObject(operation));
+        this.requestSockets.get(this.currentLeaderId).send(marshalledSignedOp);
     }
-    
+
     private broadcastOperationRequest(operation: TrebizondOperation<Op>): void {
         operation.broadcast = true;
         console.log('Broadcasting operation to all replicas');
         console.log(JSON.stringify(operation.operation));
-        var marshalledSignedOp = JSON.stringify(this.cipher.signObject(operation));
-        for (let socket of this.requestSockets.values()) {
+        const marshalledSignedOp = JSON.stringify(this.cipher.signObject(operation));
+        for (const socket of this.requestSockets.values()) {
             socket.send(marshalledSignedOp);
         }
     }
@@ -251,23 +248,21 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
      * to be provided as the value bound to the promise's resolution
      */
     private resolveCurrentOperation(result: R): void {
-        var promise = this.currentOperation![1];
         this.currentOperation = null;
         this.currentReplies.clear();
         this.lastOperationResult = result;
-        promise.resolve(result);
+        this.currentOperation[1].resolve(result);
     }
 
     private enoughMatchingReplies(threshold: number): R | null {
-        var winner = this.winnerResult();
+        const winner = this.winnerResult();
         return winner !== null && winner[1] >= threshold ? winner[0] : null;
     }
 
     private canReachConsensus(threshold: number): boolean {
-        var potentialConsensus: boolean = true;
-        if (this.currentReplies.size > 0
-                && this.enoughMatchingReplies(threshold) == null) {
-            var winner = this.winnerResult()!;
+        let potentialConsensus = true;
+        if (this.currentReplies.size > 0 && !this.enoughMatchingReplies(threshold)) {
+            const winner = this.winnerResult();
             potentialConsensus =
                 threshold - winner[1] <= this.nReplicas - this.currentReplies.size;
         }
@@ -275,21 +270,21 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
     }
 
     private winnerResult(): [R, number] | null {
-        var result: R | null = null;
-        var max = 0;
-        
-        var replies = new Map<string, [number, R]>();
-        for (let r of this.currentReplies.values()) {
-            let hash = hashObject(r);
+        let result: R = null;
+        let max = 0;
+
+        const replies = new Map<string, [number, R]>();
+        for (const r of this.currentReplies.values()) {
+            const hash = hashObject(r);
             if (replies.has(hash)) {
-                let replyCount = replies.get(hash)!;
+                const replyCount = replies.get(hash);
                 replies.set(hash, [replyCount[0] + 1, replyCount[1]]);
             } else {
                 replies.set(hash, [1, r]);
             }
         }
 
-        for (let r of replies.values()) {
+        for (const r of replies.values()) {
             if (r[0] > max) {
                 result = r[1];
                 max = r[0];
@@ -298,12 +293,12 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
 
         return result !== null ? [result, max] : null;
     }
-    
+
     private dispatchServerMessage(signedMsg: SignedObject<Message>, from: number) {
-        var sourceKey = this.serversTopology.get(from)![1];
-        if (from == signedMsg.value.from
+        const sourceKey = this.serversTopology.get(from)[1];
+        if (from === signedMsg.value.from
                 && checkObjectSignature(signedMsg, sourceKey)) {
-            var msg = signedMsg.value;
+            const msg = signedMsg.value;
             switch (msg.type) {
                 case 'LeaderRedirection':
                     this.processLeaderRedirection(msg as LeaderRedirection);
@@ -356,7 +351,7 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
     private writeOpConsensusThreshold(n: number = this.nReplicas): number {
         return Math.ceil((2 * n + 1) / 3);
     }
-    
+
     private readOpConsensusThreshold(n: number = this.nReplicas): number {
         return Math.ceil((n - 1) / 2);
     }
