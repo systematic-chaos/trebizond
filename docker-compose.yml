@@ -4,125 +4,149 @@ services:
     image: node:12-slim
     container_name: trebizond_server_1
     command: node trebizond/dist/trebizond-server/trebizondRedisServer.js 1 eth0:6530 redis_1 keys/peer_1 endpoints/docker_endpoints.txt endpoints/clients.txt
+    working_dir: /home/trebizond
     volumes:
-     - .:/home/trebizond
+     - ${PWD}:/home/trebizond:ro
     ports:
      - "6531:6530"
     networks:
-     - trebizond-back-tier
+     - back_tier
     links:
      - redis_1
   peer_2:
     image: node:12-slim
     container_name: trebizond_server_2
     command: node trebizond/dist/trebizond-server/trebizondRedisServer.js 2 eth0:6530 redis_2 keys/peer_2 endpoints/docker_endpoints.txt endpoints/clients.txt
+    working_dir: /home/trebizond
     volumes:
-     - .:/home/trebizond
+     - ${PWD}:/home/trebizond:ro
     ports:
      - "6532:6530"
     networks:
-     - trebizond-back-tier
+     - back_tier
     links:
      - redis_2
   peer_3:
     image: node:12-slim
     container_name: trebizond_server_3
     command: node trebizond/dist/trebizond-server/trebizondRedisServer.js 3 eth0:6530 redis_3 keys/peer_3 endpoints/docker_endpoints.txt endpoints/clients.txt
+    working_dir: /home/trebizond
     volumes:
-     - .:/home/trebizond
+     - ${PWD}:/home/trebizond:ro
     ports:
      - "6533:6530"
     networks:
-     - trebizond-back-tier
+     - back_tier
     links:
      - redis_3
   peer_4:
     image: node:12-slim
     container_name: trebizond_server_4
     command: node trebizond/dist/trebizond-server/trebizondRedisServer.js 4 eth0:6530 redis_4 keys/peer_4 endpoints/docker_endpoints.txt endpoints/clients.txt
+    working_dir: /home/trebizond
     volumes:
-     - .:/home/trebizond
+     - ${PWD}:/home/trebizond:ro
     ports:
      - "6534:6530"
     networks:
-     - trebizond-back-tier
+     - back_tier
     links:
      - redis_4
   peer_5:
     image: node:12-slim
     container_name: trebizond_server_5
     command: node trebizond/dist/trebizond-server/trebizondRedisServer.js 5 eth0:6530 redis_5 keys/peer_5 endpoints/docker_endpoints.txt endpoints/clients.txt
+    working_dir: /home/trebizond
     volumes:
-     - .:/home/trebizond
+     - ${PWD}:/home/trebizond:ro
     ports:
      - "6535:6530"
     networks:
-     - trebizond-back-tier
+     - back_tier
     links:
      - redis_5
   peer_6:
     image: node:12-slim
     container_name: trebizond_server_6
     command: node trebizond/dist/trebizond-server/trebizondRedisServer.js 6 eth0:6530 redis_6 keys/peer_6 endpoints/docker_endpoints.txt endpoints/clients.txt
+    working_dir: /home/trebizond
     volumes:
-     - .:/home/trebizond
+     - ${PWD}:/home/trebizond:ro
     ports:
      - "6536:6530"
     networks:
-     - trebizond-back-tier
+     - back_tier
     links:
      - redis_6
   peer_7:
     image: node:12-slim
     container_name: trebizond_server_7
     command: node trebizond/dist/trebizond-server/trebizondRedisServer.js 7 eth0:6530 redis_7 keys/peer_7 endpoints/docker_endpoints.txt endpoints/clients.txt
+    working_dir: /home/trebizond
     volumes:
-     - .:/home/trebizond
+     - ${PWD}:/home/trebizond:ro
     ports:
      - "6537:6530"
     networks:
-     - trebizond-back-tier
+     - back_tier
     links:
      - redis_7
   redis_1:
     image: redis:4-alpine
     container_name: trebizond_redis_1
     networks:
-      - trebizond-back-tier
+      - back_tier
   redis_2:
     image: redis:4-alpine
     container_name: trebizond_redis_2
     networks:
-     - trebizond-back-tier
+     - back_tier
   redis_3:
     image: redis:4-alpine
     container_name: trebizond_redis_3
     networks:
-     - trebizond-back-tier
+     - back_tier
   redis_4:
     image: redis:4-alpine
     container_name: trebizond_redis_4
     networks:
-     - trebizond-back-tier
+     - back_tier
   redis_5:
     image: redis:4-alpine
     container_name: trebizond_redis_5
     networks:
-     - trebizond-back-tier
+     - back_tier
   redis_6:
     image: redis:4-alpine
     container_name: trebizond_redis_6
     networks:
-     - trebizond-back-tier
+     - back_tier
   redis_7:
     image: redis:4-alpine
     container_name: trebizond_redis_7
     networks:
-     - trebizond-back-tier
+     - back_tier
+  logspout:
+    image: gliderlabs/logspout
+    container_name: trebizond_logspout
+    volumes:
+     - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+     - "127.0.0.1:8000:80"
+    networks:
+     - back_tier
+    links:
+     - peer_1
+     - peer_2
+     - peer_3
+     - peer_4
+     - peer_5
+     - peer_6
+     - peer_7
 networks:
-  network-back-tier:
+  back_tier:
     driver: bridge
-    imap:
+    ipam:
       driver: default
       config:
        - subnet: 172.16.238.0/24
