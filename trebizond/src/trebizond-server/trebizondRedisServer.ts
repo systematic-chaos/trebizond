@@ -14,7 +14,9 @@ import { RedisOperation,
          RedisResult,
          RedisStateMachine } from '../redis-state-machine/redisCommand';
 import { RedisMessageValidator } from '../redis-state-machine/redisMessageValidator';
-import { TrebizondServer } from '../trebizond-server/server';
+import { TrebizondServer, PeerDefinition } from '../trebizond-server/server';
+import { log } from '../trebizond-common/logger';
+import { sleep } from '../trebizond-common/util';
 import * as fs from 'fs';
 import * as IORedis from 'ioredis';
 
@@ -25,31 +27,30 @@ if (process.argv.length < 8) {
     process.exit(1);
 }
 
-const id: number = parseInt(process.argv[2]);
-const exposed: string = process.argv[3];
-const redisEndpoint: string = process.argv[4];
-const privateKey: string = fs.readFileSync(process.argv[5], 'utf-8');
-const serversFile: string = process.argv[6];
-const peers = fs.readFileSync(serversFile, 'utf-8').split('\n').filter(Boolean);
-const clusterSize = peers.length;
+const id = parseInt(process.argv[2]);
+const exposedEndpoint = process.argv[3];
+const redisEndpoint = process.argv[4];
+const privateKey = fs.readFileSync(process.argv[5], 'utf8');
+const serversFile = process.argv[6];
+const clientsFile = process.argv[7];
 
-const peersTopology = new Map<number, string>();
-const peerKeys = new Map<number, string>();
-peers.forEach((element) => {
-    const peerConfig: string[] = element.split('\t');
-    peersTopology.set(Number(peerConfig[0]), peerConfig[1]);
-    const peerPublicKey: string = fs.readFileSync(peerConfig[2], 'utf8');
-    peerKeys.set(Number(peerConfig[0]), peerPublicKey);
-});
+const peers: Record<number, PeerDefinition> = {};
+fs.readFileSync(serversFile, 'utf8').split('\n').filter(server => server.length > 0)
+    .forEach((server) => {
+        const serverDef = server.split('\t');
+        const id = parseInt(serverDef[0]);
+        const endpoint = serverDef[1];
+        const publicKey = fs.readFileSync(serverDef[2]);
+        peers[id] = { id, endpoint, publicKey };
+    });
+const clusterSize = Object.keys(peers).length;
 
-const clientsFile: string = process.argv[7];
-const clients = fs.readFileSync(clientsFile, 'utf-8').split('\n').filter(Boolean);
-const clientKeys = new Map<number, string>();
-clients.forEach((element) => {
-    const clientConfig: string[] = element.split('\t');
-    const clientPublicKey: string = fs.readFileSync(clientConfig[1], 'utf-8');
-    clientKeys.set(Number(clientConfig[0]), clientPublicKey);
-});
+const clients: Record<string, Buffer> = {};
+fs.readFileSync(clientsFile, 'utf8').split('\n').filter(client => client.length > 0)
+    .forEach((client) => {
+        const [id, publicKeyFile] = client.split('\t');
+        clients[id] = fs.readFileSync(publicKeyFile);
+    });
 
 if (id - 1 >= clusterSize || id - 1 < 0) {
     console.error('Server index is out of the input endpoint addresses bounds.');
@@ -67,9 +68,20 @@ if (redisEndpoint.lastIndexOf(':') > 0) {
     redisPort = 6379;
 }
 
-const redis = new Redis(redisPort, redisHost);
+async function main() {
+    await sleep(3000);
+    const redis = new Redis(redisPort, redisHost);
+    log.info(redis.status);
 
-new TrebizondServer<RedisOperation, RedisResult>(
-    id, peersTopology,
-    peerKeys, clientKeys,
-    exposed, privateKey, new RedisStateMachine(redis, new RedisMessageValidator()));
+    /*new TrebizondServer<RedisOperation, RedisResult>(
+        id, peersTopology,
+        peerKeys, clientKeys,
+        exposedEndpoint, privateKey, new RedisStateMachine(redis, new RedisMessageValidator()));*/
+    /*new TrebizondServer<RedisOperation, RedisResult>(
+        id, peers, clients, exposedEndpoint, privateKey,
+        new RedisStateMachine(redis, new RedisMessageValidator()));*/
+
+    redis.disconnect(false);
+}
+
+main();

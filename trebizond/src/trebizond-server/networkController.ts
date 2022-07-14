@@ -564,3 +564,9 @@ export class SynchronousServerNetworkController extends ServerNetworkController
         }
     }
 }
+
+export interface ServerDefinition {
+    id?: number,
+    endpoint: string,
+    publicKey: Buffer
+}

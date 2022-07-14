@@ -25,7 +25,7 @@ import { Operation,
          AtomicBroadcastMessageLog } from '../trebizond-common/datatypes';
 import { BlockChain,
          StateMachine } from '../state-machine-connector/command';
-import { ServerNetworkController } from './networkController';
+import { ServerNetworkController, ServerDefinition } from './networkController';
 import { FailureDetector } from './failureDetector';
 import { SignedObject,
          hashObject,
@@ -742,3 +742,5 @@ export class OperableTrebizondServer<Op extends Operation, R extends Result> ext
             serverPrivateKey, stateMachine);
     }
 }
+
+export { ServerDefinition as PeerDefinition };
