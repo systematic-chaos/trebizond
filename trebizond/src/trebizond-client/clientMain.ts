@@ -21,16 +21,18 @@ if (process.argv.length < 4) {
     process.exit(1);
 }
 
-const clientConf = fs.readFileSync(process.argv[2], 'utf-8').split('\t').filter(Boolean);
+const clientConf = fs.readFileSync(process.argv[2], 'utf-8')
+    .split('\t').filter(client => client.length);
 const clientId = parseInt(clientConf[0]);
 const clientPrivateKey = fs.readFileSync(clientConf[1], 'utf-8');
-const servers = fs.readFileSync(process.argv[2], 'utf-8').split('\n').filter(Boolean);
+const servers = fs.readFileSync(process.argv[2], 'utf-8')
+    .split('\n').filter(server => server.length);
 
-const serversConfig = new Map<number, [string, string]>();
+const serversConfig: Record<number, [string, Buffer]> = {};
 servers.forEach((element) => {
     const serverConfig = element.split('\t');
-    const serverPublicKey = fs.readFileSync(serverConfig[2], 'utf-8');
-    serversConfig.set(parseInt(serverConfig[0]), [serverConfig[1], serverPublicKey]);
+    const serverPublicKey = fs.readFileSync(serverConfig[2]);
+    serversConfig[parseInt(serverConfig[0])] = [serverConfig[1], serverPublicKey];
 });
 
 const client = new TrebizondClient<RedisOperation, RedisResult>([clientId, clientPrivateKey], serversConfig);

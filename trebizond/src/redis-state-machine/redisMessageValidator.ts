@@ -10,8 +10,7 @@
  * redis-state-machine/redisMessageValidator.ts
  */
 
-import { RedisOperator,
-         RedisOperation } from './redisCommand';
+import { RedisOperator, RedisOperation } from './redisCommand';
 import { MessageValidator } from '../state-machine-connector/messageValidator';
 
 export class RedisMessageValidator extends MessageValidator<RedisOperation> {

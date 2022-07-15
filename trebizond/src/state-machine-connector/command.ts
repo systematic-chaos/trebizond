@@ -10,14 +10,11 @@
  * state-machine-connector/command.ts
  */
 
-import { Operation,
-         Result } from '../trebizond-common/datatypes';
+import { Operation } from '../trebizond-common/datatypes';
 import { MessageValidator } from '../state-machine-connector/messageValidator';
-import { SignedObject,
-         hashText,
-         signObject } from '../trebizond-common/crypto';
+import { SignedObject, hashText, signObject } from '../trebizond-common/crypto';
 
-export abstract class StateMachine<Op extends Operation, R extends Result> {
+abstract class StateMachine<Op extends Operation, R> {
 
     protected msgValidator: MessageValidator<Op>;
 
@@ -29,9 +26,9 @@ export abstract class StateMachine<Op extends Operation, R extends Result> {
 
     public abstract applyOperation(operation: Op, callback: (result: R) => void): void;
 
-    public abstract getSnapshot(): Promise<Map<string, number>>;
+    public abstract getSnapshot(): Promise<Record<string, number>>;
 
-    public abstract setSnapshot(snapshot: Map<string, number>): void;
+    public abstract setSnapshot(snapshot: Record<string, number>): void;
 
     public getMessageValidator(): MessageValidator<Op> {
         return this.msgValidator;
@@ -42,7 +39,7 @@ export abstract class StateMachine<Op extends Operation, R extends Result> {
     }
 }
 
-export class BlockChain<Op extends Operation, R extends Result> {
+class BlockChain<Op extends Operation, R> {
 
     private log: Array<SignedObject<Block<Op, R>>> = [];
 
@@ -68,8 +65,10 @@ export class BlockChain<Op extends Operation, R extends Result> {
     }
 }
 
-export interface Block<Op extends Operation, R extends Result> {
+interface Block<Op extends Operation, R> {
     operation: Op;
     resultingStatus: R;
     previousBlockHash: string | null;
 }
+
+export { StateMachine, Block, BlockChain };

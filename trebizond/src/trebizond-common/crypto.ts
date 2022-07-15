@@ -15,104 +15,107 @@ import aes from 'crypto-js/aes';
 import utf8 from 'crypto-js/enc-utf8';
 import nacl from 'tweetnacl-util';
 
-export function generateSignedDigestFromText(text: string, key: string): Uint8Array {
+function generateSignedDigestFromText(text: string, key: string): Uint8Array {
     return encryptText(hashText(text), key);
 }
 
-export function generateSignedDigestFromBytes(bytes: Uint8Array, key: string): Uint8Array {
+function generateSignedDigestFromBytes(bytes: Uint8Array, key: string): Uint8Array {
     return encryptText(hashBytes(bytes), key);
 }
 
-export function generateSignedDigestFromObject(obj: object, key: string): Uint8Array {
+function generateSignedDigestFromObject(obj: object, key: string): Uint8Array {
     return encryptText(hashObject(obj), key);
 }
 
-export function signText(text: string, key: string): SignedText {
+function signText(text: string, key: string): SignedText {
     return {
         value: text,
         signature: generateSignedDigestFromText(text, key)
     };
 }
 
-export function signBytes(bytes: Uint8Array, key: string): SignedBytes {
+function signBytes(bytes: Uint8Array, key: string): SignedBytes {
     return {
         value: bytes,
         signature: generateSignedDigestFromBytes(bytes, key)
     };
 }
 
-export function signObject(obj: object, key: string): SignedObject<object> {
+function signObject(obj: object, key: string): SignedObject<object> {
     return {
         value: obj,
         signature: generateSignedDigestFromObject(obj, key)
     };
 }
 
-export function checkTextSignature(signedtext: SignedText, key: string): boolean {
-    return hashText(signedtext.value) === decryptText(signedtext.signature, key);
+function checkTextSignature(signedText: SignedText, key: Buffer): boolean {
+    return hashText(signedText.value) ===
+        decryptText(signedText.signature, key.toString('utf8'));
 }
 
-export function checkBytesSignature(signedbytes: SignedBytes, key: string): boolean {
-    return hashBytes(signedbytes.value) === decryptText(signedbytes.signature, key);
+function checkBytesSignature(signedBytes: SignedBytes, key: Buffer): boolean {
+    return hashBytes(signedBytes.value) ===
+        decryptText(signedBytes.signature, key.toString('utf8'));
 }
 
-export function checkObjectSignature(signedobject: SignedObject<object>, key: string): boolean {
-    return hashObject(signedobject.value) === decryptText(signedobject.signature, key);
+function checkObjectSignature(signedObject: SignedObject<object>, key: Buffer): boolean {
+    return hashObject(signedObject.value) ===
+        decryptText(signedObject.signature, key.toString('utf8'));
 }
 
 interface Signed {
     signature: Uint8Array;
 }
 
-export interface SignedText extends Signed {
+interface SignedText extends Signed {
     value: string;
 }
 
-export interface SignedBytes extends Signed {
+interface SignedBytes extends Signed {
     value: Uint8Array;
 }
 
-export interface SignedObject<O extends object> extends Signed {
+interface SignedObject<O extends object> extends Signed {
     value: O;
 }
 
-export function encryptText(text: string, key: string): Uint8Array {
+function encryptText(text: string, key: string): Uint8Array {
     return nacl.decodeUTF8(aes.encrypt(text, key).toString());
 }
 
-export function encryptBytes(bytes: Uint8Array, key: string): Uint8Array {
+function encryptBytes(bytes: Uint8Array, key: string): Uint8Array {
     return nacl.decodeUTF8(aes.encrypt(nacl.encodeUTF8(bytes), key).toString());
 }
 
-export function encryptObject(obj: object, key: string): Uint8Array {
+function encryptObject(obj: object, key: string): Uint8Array {
     return nacl.decodeUTF8(aes.encrypt(JSON.stringify(obj), key).toString());
 }
 
-export function decryptText(cipherbytes: Uint8Array, key: string): string {
+function decryptText(cipherbytes: Uint8Array, key: string): string {
     return aes.decrypt(nacl.encodeUTF8(cipherbytes), key).toString(utf8);
 }
 
-export function decryptBytes(cipherbytes: Uint8Array, key: string): Uint8Array {
+function decryptBytes(cipherbytes: Uint8Array, key: string): Uint8Array {
     return nacl.decodeUTF8(aes.decrypt(nacl.encodeUTF8(cipherbytes), key).toString(utf8));
 }
 
-export function decryptObject(cipherbytes: Uint8Array, key: string): object {
+function decryptObject(cipherbytes: Uint8Array, key: string): object {
     return JSON.parse(aes.decrypt(nacl.encodeUTF8(cipherbytes), key).toString(utf8));
 }
 
-export function hashText(text: string): string {
+function hashText(text: string): string {
     return sha2(text).toString();
 }
 
-export function hashBytes(bytes: Uint8Array): string {
+function hashBytes(bytes: Uint8Array): string {
     return sha2(nacl.encodeUTF8(bytes)).toString();
 }
 
-export function hashObject(obj: object): string {
+function hashObject(obj: object): string {
     return sha2(JSON.stringify(obj)).toString();
 }
 
-export class Cipher {
+class Cipher {
 
     private key: string;
 
@@ -156,3 +159,13 @@ export class Cipher {
         return decryptObject(cipherbytes, this.key);
     }
 }
+
+export {
+    generateSignedDigestFromText, generateSignedDigestFromBytes, generateSignedDigestFromObject,
+    signText, signBytes, signObject,
+    checkTextSignature, checkBytesSignature, checkObjectSignature,
+    SignedText, SignedBytes, SignedObject,
+    encryptText, encryptBytes, encryptObject,
+    decryptText, decryptBytes, decryptObject,
+    hashText, hashBytes, hashObject,
+    Cipher };

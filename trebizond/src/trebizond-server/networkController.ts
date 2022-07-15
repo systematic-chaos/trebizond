@@ -30,24 +30,25 @@ import * as dns from 'dns';
  * the headers for those functions any NetworkController worth such a
  * categorization must support and implement.
  */
-export abstract class NetworkController {
+abstract class NetworkController {
 
     /**
-     * Socket used for sending request messages to peer servers in the cluster.
+     * Sockets used for sending request messages to peer servers in the cluster.
+     * TODO MULTIPLE ROUTER SOCKETS?
      */
-    protected routerSocket!: zeromq.Socket;
+    protected routerSocket: zeromq.Socket;
 
     /**
      * Socket used for receiving requests from peer servers in the cluster
      * and answer them via reply messages.
      */
-    protected dealerSocket!: zeromq.Socket;
+    protected dealerSocket: zeromq.Socket;
 
     /**
      * Socket used for receiving commands from clients and answering them
      * upon their commitment or refusal
      */
-    protected replySocket!: zeromq.Socket;
+    protected replySocket: zeromq.Socket;
 
     /**
      * Marshall a message into an array of strings so that it can be
@@ -130,7 +131,7 @@ export abstract class NetworkController {
  * Provides networking connectivity and communications in the context
  * of an peer-to-peer nodes topology
  */
-export class ServerNetworkController extends NetworkController {
+class ServerNetworkController extends NetworkController {
 
     /**
      * this server endpoint, also working as an identifier
@@ -140,17 +141,17 @@ export class ServerNetworkController extends NetworkController {
     /**
      * other peers endpoints, also working as their respective identifiers
      */
-    protected topologyPeers: Map<number, string>;
+    protected peers: Record<number, ServerDefinition>;
 
     /**
-     * other peers public keys, for checking digital signatures
+     * the private key of this server for signing messages
      */
-    protected peerKeys: Map<number, string>;
+    protected privateKey: string;
 
     /**
      * clients public keys, for checking digital signatures
      */
-    protected clientKeys: Map<number, string>;
+    protected clientKeys: Record<number, Buffer>;
 
     /**
      * function provided by the server instantiating this controller,
@@ -161,43 +162,46 @@ export class ServerNetworkController extends NetworkController {
 
     /**
      * NetworkController class constructor
-     * @param serverId Endpoint for this server, also working as an identifier
-     * @param topologyPeers Endpoint distribution for the peer nodes in the
-     *                      cluster topology. This server must have been
-     *                      previously removed from the array
+     * @param id Endpoint for this server, also working as an identifier.
+     * @param peers Endpoint distribution for the peer nodes in the
+     *          cluster topology. This server must have been
+     *          previously removed from the array.
      * @param externalEndpoint IP address and port onto which the server
-     *                          will attend client's requests
+     *          will attend client's requests.
+     * @param privateKey Private key of this server for signing messages
+     *          to be sent and decrypting messages received.
+     * @param clientKeys Identifiers of the authorized clients along with their
+     *          public keys.
      * @param onMessageCallback Function to be executed when a message
-     *                          of any type destinated to this server is received
+     *          of any type destinated to this server is received.
      * @param onRequestCallback Function to be executed when a client operation
-     *                          request is received by this server
+     *          request is received by this server.
      */
-    constructor(id: number, topologyPeers: Map<number, string>,
-            peerKeys: Map<number, string>,
-            clientKeys: Map<number, string>,
-            externalEndpoint: string,
+    constructor(id: number, peers: Record<number, ServerDefinition>,
+            externalEndpoint: string, privateKey: string,
+            clientKeys: Record<number, Buffer>,
             onMessageCallback: (message: SignedObject<Message>) => void,
             onRequestCallback:(message: SignedObject<OpMessage<Operation>>) => void) {
         super();
         this.id = id;
-        this.topologyPeers = topologyPeers;
-        this.peerKeys = peerKeys;
+        this.peers = peers;
         this.clientKeys = clientKeys;
+        this.privateKey = privateKey;
 
-        this.bindInternalSockets(topologyPeers, onMessageCallback);
+        this.bindInternalSockets(peers, onMessageCallback);
         this.bindExternalSocket(externalEndpoint, onRequestCallback);
     }
 
-    private bindInternalSockets(topologyPeers: Map<number, string>,
+    private bindInternalSockets(peerTopology: Record<number, ServerDefinition>,
             onMessageCallback: (msg: SignedObject<Message>) => void): void {
-        const internalEndpoint = this.topologyPeers.get(this.id);
-        this.topologyPeers.delete(this.id);
+        const internalEndpoint = peerTopology[this.id].endpoint;
+        delete peerTopology[this.id];
 
         this.routerSocket = zeromq.socket('router');
         //this.routerSocket.setsocketopt(/* ZMQ_ROUTER_MANDATORY */ 33, 1);
         this.routerSocket.on('error', this.manageDeliveryError.bind(this));
-        for (const peer of topologyPeers.values()) {
-            this.routerSocket.connect(NetworkController.PROTOCOL_PREFIX + peer);
+        for (const peer of Object.values(peerTopology)) {
+            this.routerSocket.connect(NetworkController.PROTOCOL_PREFIX + peer.endpoint);
             console.log('Connected to endpoint ' + peer);
         }
 
@@ -233,7 +237,7 @@ export class ServerNetworkController extends NetworkController {
      */
     public sendMessage(msg: Message, to: number): void {
         console.log('Server ' + this.id + ' sending ' + msg.type + ' message to ' + to);
-        const signed = signObject(msg, this.peerKeys.get(this.id)) as SignedObject<Message>;
+        const signed = signObject(msg, this.privateKey) as SignedObject<Message>;
         const marshalled = this.marshallMessage(signed, this.id, to);
         marshalled.unshift(to.toString());
 
@@ -255,11 +259,9 @@ export class ServerNetworkController extends NetworkController {
     /**
      * Sends a message of any type to every peer server in the cluster.
      * @param msg Request message to be sent
-     * @param timeout Optional timeout to be triggered when it expires without
-     *                  a reply having been received
      */
     public sendBroadcast(msg: Message): void {
-        return this.sendMulticast(msg, [...this.topologyPeers.keys()]);
+        return this.sendMulticast(msg, Object.keys(this.peers).map(Number));
     }
 
     /**
@@ -267,7 +269,7 @@ export class ServerNetworkController extends NetworkController {
      */
     public replyClientOperation(msg: Message): void {
         console.log('Server ' + this.id + ' sending ' + msg.type + ' reply message to client');
-        const signed = signObject(msg, this.peerKeys.get(this.id)) as SignedObject<Message>;
+        const signed = signObject(msg, this.privateKey) as SignedObject<Message>;
         this.replySocket.send(JSON.stringify(signed));
     }
 
@@ -279,7 +281,7 @@ export class ServerNetworkController extends NetworkController {
         console.log('Server ' + message.ids[message.ids.length - 1] + ': Received message of type ' + message.type + ' from ' + message.ids[0]);
 
         // Check message validity before dispatching it
-        const sourceKey = this.peerKeys.get(message.msg.value.from);
+        const sourceKey = this.peers[message.msg.value.from].publicKey;
         if (sourceKey && checkObjectSignature(message.msg, sourceKey)
                 && message.type === message.msg.value.type) {
             this.onMessageCallback(message.msg);
@@ -302,7 +304,7 @@ export class ServerNetworkController extends NetworkController {
         console.log('Server ' + this.id + ': Received operation request message from client ' + message.value.from);
 
         // Check message validity before dispatching it
-        const sourceKey = this.peerKeys.get(message.value.from);
+        const sourceKey = this.clientKeys[message.value.from];
         if (sourceKey && checkObjectSignature(message, sourceKey)) {
             this.onRequestCallback(message);
         }
@@ -326,8 +328,6 @@ export class ServerNetworkController extends NetworkController {
 }
 
 function resolveHostnameToNetworkAddress(endpoint: string): Promise<string> {
-    const p = new QPromise<string>();
-
     let i: number;
     let endpointPort: number;
     let endpointAddress: string;
@@ -339,15 +339,18 @@ function resolveHostnameToNetworkAddress(endpoint: string): Promise<string> {
         endpointAddress = endpoint;
         endpointPort = 0;
     }
-    dns.lookup(endpointAddress, (err, address, family) => {
-        if (err === null && address !== undefined && family !== undefined) {
-            endpointAddress = address;
-        }
-        endpointAddress = endpointAddress + (endpointPort > 0 ? ':' + endpointPort : '');
-        p.resolve(endpointAddress);
-    });
 
-    return p.promise;
+    return new Promise<string>(resolve => {
+        dns.lookup(endpointAddress, (err, address, family) => {
+            if (!err && address && family) {
+                endpointAddress = address;
+            }
+            if (endpointPort > 0) {
+                endpointAddress += `:${endpointPort}`;
+            }
+            resolve(endpointAddress);
+        });
+    });
 }
 
 function identifyEndpointInterface(endpoint: string): string {
@@ -365,7 +368,7 @@ function identifyEndpointInterface(endpoint: string): string {
     return endpointInterface;
 }
 
-export interface SynchronousNetworkController {
+interface SynchronousNetworkController {
 
     /**
      * Sends a request message of any type to another server in the cluster.
@@ -437,28 +440,28 @@ export interface SynchronousNetworkController {
      * @param reply Reply message to be sent
      * @param recipientId Identifier of the server to whom send the reply
      */
-    sendReply(msg: Reply, to: number): void;
+    sendReply(reply: Reply, recipientId: number): void;
 }
 
-export class SynchronousServerNetworkController extends ServerNetworkController
+class SynchronousServerNetworkController extends ServerNetworkController
                                                 implements SynchronousNetworkController {
 
     /**
      * promises to the replies to be received from peers as answers to
      * previously sent requests, when they will be resolved
      */
-    private pendingReplies: Map<string, QPromise<Envelope<Reply>>>;
+    private pendingReplies: Record<string, QPromise<Envelope<Reply>>>;
 
     /**
      * @inheritDoc
      */
-    constructor(id: number, topologyPeers: Map<number, string>,
-            peerKeys: Map<number, string>, clientKeys: Map<number, string>,
-            externalEndpoint: string,
+    constructor(id: number, peers: Record<number, ServerDefinition>,
+            externalEndpoint: string, privateKey: string,
+            clientKeys: Record<number, Buffer>,
             onMessageCallback: (message: SignedObject<Message>) => void,
             onCommandCallback: (message: SignedObject<OpMessage<Operation>>) => void) {
-        super(id, topologyPeers, peerKeys, clientKeys, externalEndpoint, onMessageCallback, onCommandCallback);
-        this.pendingReplies = new Map<string, QPromise<Envelope<Reply>>>();
+        super(id, peers, externalEndpoint, privateKey, clientKeys, onMessageCallback, onCommandCallback);
+        this.pendingReplies = {};
     }
 
     /**
@@ -466,19 +469,19 @@ export class SynchronousServerNetworkController extends ServerNetworkController
      */
     public sendMessageSync(req: Message, to: number, timeout?: number): QPromise<Envelope<Reply>> {
         console.log('Server ' + this.id + ' sending ' + req.type + ' message to ' + to);
-        const signed = signObject(req, this.peerKeys.get(this.id)) as SignedObject<Message>;
+        const signed = signObject(req, this.privateKey) as SignedObject<Message>;
         const marshalled = this.marshallMessage(signed, this.id, to);
         marshalled.unshift(to.toString());
 
         const p = new QPromise<Envelope<Reply>>();
         const envelopeSerialUUID = marshalled[marshalled.length - 2];
-        this.pendingReplies.set(envelopeSerialUUID, p);
+        this.pendingReplies[envelopeSerialUUID] = p;
 
         if (timeout) {
             setTimeout(() => {
                 if (!p.isResolved()) {
                     p.reject('Timeout exceeded');
-                    this.pendingReplies.delete(envelopeSerialUUID);
+                    delete this.pendingReplies[envelopeSerialUUID];
                 }
             }, timeout);
         }
@@ -501,7 +504,7 @@ export class SynchronousServerNetworkController extends ServerNetworkController
      * @inheritDoc
      */
     public sendBroadcastSync(req: Message, timeout?: number): QPromise<Envelope<Reply>>[] {
-        return this.sendMulticastSync(req, [...this.topologyPeers.keys()], timeout);
+        return this.sendMulticastSync(req, Object.keys(this.peers).map(Number), timeout);
     }
 
     /**
@@ -509,8 +512,8 @@ export class SynchronousServerNetworkController extends ServerNetworkController
      */
     public sendReply(msg: Reply, to: number): void {
         console.log('Server ' + this.id + ' replies with ' + msg.type + ' message to ' + to);
-        const marshalled = this.marshallMessage(signObject(msg,
-            this.peerKeys.get(this.id)) as SignedObject<Reply>, this.id, to, msg.serialUUID);
+        const marshalled = this.marshallMessage(signObject(
+            msg, this.privateKey) as SignedObject<Reply>, this.id, to, msg.serialUUID);
         marshalled.unshift(to.toString());
         this.routerSocket.send(marshalled);
     }
@@ -523,7 +526,7 @@ export class SynchronousServerNetworkController extends ServerNetworkController
         console.log('Server' + message.ids[message.ids.length - 1] + ': Received message of type ' + message.type + ' from ' + message.ids[0]);
 
         // Check message validity before dispatching it
-        const sourceKey = this.peerKeys.get(message.msg.value.from);
+        const sourceKey = this.peers[message.msg.value.from].publicKey;
         if (sourceKey && checkObjectSignature(message.msg, sourceKey)
                 && message.type === message.msg.value.type) {
             if (!this.isReplyMessage(message)) {
@@ -540,15 +543,15 @@ export class SynchronousServerNetworkController extends ServerNetworkController
      * the message received as the resolution parameter.
      */
     protected dispatchReplyMessage(message: Envelope<Reply>): void {
-        const p = this.pendingReplies.get(message.serialUUID);
+        const p = this.pendingReplies[message.serialUUID];
         if (p && p.isPending()) {
             p.resolve(message);
-            this.pendingReplies.delete(message.serialUUID);
+            delete this.pendingReplies[message.serialUUID];
         }
     }
 
     protected isReplyMessage(message: Envelope<Message>): boolean {
-        return this.pendingReplies.has(message.serialUUID);
+        return message.serialUUID in this.pendingReplies;
     }
 
     /**
@@ -557,16 +560,20 @@ export class SynchronousServerNetworkController extends ServerNetworkController
     protected manageDeliveryError(...args: string[]): void {
         const message = this.unmarshallMessage(args);
         console.log('Server ' + message.ids[0] + ': Failed to send message of type ' + message.type + ' to ' + message.ids[message.ids.length - 1]);
-        const p = this.pendingReplies.get(message.serialUUID);
+        const p = this.pendingReplies[message.serialUUID];
         if (p && p.isPending()) {
             p.reject('Delivery error');
-            this.pendingReplies.delete(message.serialUUID);
+            delete this.pendingReplies[message.serialUUID];
         }
     }
 }
 
-export interface ServerDefinition {
+interface ServerDefinition {
     id?: number,
     endpoint: string,
     publicKey: Buffer
 }
+
+export {
+    ServerNetworkController, SynchronousNetworkController, SynchronousServerNetworkController,
+    ServerDefinition };

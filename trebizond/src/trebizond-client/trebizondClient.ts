@@ -22,54 +22,53 @@ import { Message,
          CollectiveReply,
          SingleReply,
          Operation,
-         Result,
          TrebizondOperation } from '../trebizond-common/datatypes';
 import * as zeromq from 'zeromq';
 
-export class TrebizondClient<Op extends Operation, R extends Result> {
+export class TrebizondClient<Op extends Operation, R extends object> {
 
     private clientId: number;
     private privateKey: string;
 
     // server id, [server endpoint, server public key]
-    private serversTopology: Map<number, [string, string]>;
+    private serversTopology: Record<number, [string, Buffer]>;
 
     private cipher: Cipher;
 
-    private requestSockets: Map<number, zeromq.Socket>;
+    private requestSockets: Record<number, zeromq.Socket>;
 
     private nReplicas: number;
     private pendingOperations: Array<[TrebizondOperation<Op>, QPromise<R>]> = [];
     private currentOperation: [TrebizondOperation<Op>, QPromise<R>] | null = null;
     private currentLeaderId: number;
     private unicastAttempts = 0;
-    private currentReplies: Map<number, R> = new Map<number, R>();
-    private lastOperationResult: R | null = null;
+    private currentReplies: Record<number, R> = {};
     private timerExpired = false;
 
     protected static readonly TRANSPORT_PROTOCOL: string = 'tcp';
     protected static readonly PROTOCOL_PREFIX: string = TrebizondClient.TRANSPORT_PROTOCOL + '://';
 
     constructor(client: [number, string],
-            serversTopology: Map<number, [string, string]>) {
+            serversTopology: Record<number, [string, Buffer]>) {
         this.clientId = client[0];
         this.privateKey = client[1];
         this.serversTopology = serversTopology;
 
         this.cipher = new Cipher(this.privateKey);
-        this.requestSockets = new Map<number, zeromq.Socket>();
+        this.requestSockets = {};
         this.connectToServers(serversTopology, this.requestSockets);
 
-        this.nReplicas = this.requestSockets.size;
+        this.nReplicas = Object.keys(this.requestSockets).length;
         this.currentLeaderId = this.randomizeCurrentLeader();
     }
 
-    private connectToServers(serverTopology: Map<number, [string, string]>,
-            requestSockets: Map<number, zeromq.Socket>): number {
-        serverTopology.forEach((value, serverId) => {
+    private connectToServers(serverTopology: Record<number, [string, Buffer]>,
+            requestSockets: Record<number, zeromq.Socket>): number {
+        Object.entries(serverTopology).forEach(([sId, value]) => {
             if (!value[0].startsWith(TrebizondClient.PROTOCOL_PREFIX)) {
+                const serverId = Number(sId);
                 const serverEndpoint = TrebizondClient.PROTOCOL_PREFIX + value[0];
-                serverTopology.set(serverId, [serverEndpoint, value[1]]);
+                serverTopology[serverId] = [serverEndpoint, value[1]];
                 const serverSocket = zeromq.createSocket('req');
                 try {
                     serverSocket.connect(serverEndpoint);
@@ -79,14 +78,14 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
                     serverSocket.on('message', msg => {
                         this.dispatchServerMessage(JSON.parse(msg), serverId);
                     });
-                    requestSockets.set(serverId, serverSocket);
+                    requestSockets[serverId] = serverSocket;
                 } catch(ex) {
                     console.error('Failed to connect to cluster endpoint ' +
                         serverId + ' (' + serverEndpoint + ')');
                 }
             }
         });
-        return requestSockets.size;
+        return Object.keys(requestSockets).length;
     }
 
     public sendCommand(command: Op): Promise<R> {
@@ -115,7 +114,6 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
             // First delivery attempt for the new current operation
             this.currentOperation = this.pendingOperations.shift();
             this.unicastAttempts = 0;
-            this.lastOperationResult = null;
             this.timerExpired = false;
 
             this.resetTimer(this.currentOperation[0]);
@@ -166,8 +164,8 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
             this.currentLeaderId = reply.from;
             const mainResult = reply.result;
             const mainResultHash = hashObject(mainResult);
-            if (reply.resultAcknowledgments.size >= (2 * this.nReplicas + 1) / 3
-                    && Array.from(reply.resultAcknowledgments).every(
+            if (Object.keys(reply.resultAcknowledgments).length >= (2 * this.nReplicas + 1) / 3
+                    && Object.entries(reply.resultAcknowledgments).every(
                         resultAck => this.matchesResultDigest(resultAck, mainResultHash))) {
                 this.resolveCurrentOperation(mainResult.result);
             }
@@ -182,8 +180,8 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
          */
         if (this.currentOperation !== null
                 && this.currentOperation[0].uuid === reply.result.value.opUuid
-                && !this.currentReplies.has(reply.from)) {
-            this.currentReplies.set(reply.from, reply.result.value.result);
+                && !(reply.from in this.currentReplies)) {
+            this.currentReplies[reply.from] = reply.result.value.result;
 
             /**
              * Set minimum votes a result must gather in order to reach consensus,
@@ -209,7 +207,7 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
              * operation is (maybe, once again) broadcasted.
              */
             else if (!this.canReachConsensus(consensusThreshold)) {
-                this.currentReplies.clear();
+                this.currentReplies = {};
                 this.unicastAttempts = -1;
                 this.resetTimer(this.currentOperation[0]);
                 this.broadcastOperationRequest(this.currentOperation[0]);
@@ -217,19 +215,20 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
         }
     }
 
-    private matchesResultDigest(acknowledgment: [number, Uint8Array], mainHash?: string): boolean {
-        const source = acknowledgment[0];
-        return this.serversTopology.has(source)
-                && mainHash === decryptText(acknowledgment[1], this.serversTopology.get(source)[1]);
+    private matchesResultDigest(acknowledgment: [string, Uint8Array], mainHash?: string): boolean {
+        const source = Number(acknowledgment[0]);
+        return source in this.serversTopology
+            && mainHash === decryptText(acknowledgment[1],
+                this.serversTopology[source][1].toString('utf8'));
     }
 
     private unicastOperationRequest(operation: TrebizondOperation<Op>): void {
-        const currentServerEndpoint = this.serversTopology.get(this.currentLeaderId)[0];
+        const currentServerEndpoint = this.serversTopology[this.currentLeaderId][0];
         console.log('Sending operation to ' + this.currentLeaderId +
         '(' + currentServerEndpoint + ')');
         console.log(JSON.stringify(operation.operation));
         const marshalledSignedOp = JSON.stringify(this.cipher.signObject(operation));
-        this.requestSockets.get(this.currentLeaderId).send(marshalledSignedOp);
+        this.requestSockets[this.currentLeaderId].send(marshalledSignedOp);
     }
 
     private broadcastOperationRequest(operation: TrebizondOperation<Op>): void {
@@ -237,9 +236,9 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
         console.log('Broadcasting operation to all replicas');
         console.log(JSON.stringify(operation.operation));
         const marshalledSignedOp = JSON.stringify(this.cipher.signObject(operation));
-        for (const socket of this.requestSockets.values()) {
+        Object.values(this.requestSockets).forEach(socket => {
             socket.send(marshalledSignedOp);
-        }
+        });
     }
 
     /**
@@ -249,8 +248,7 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
      */
     private resolveCurrentOperation(result: R): void {
         this.currentOperation = null;
-        this.currentReplies.clear();
-        this.lastOperationResult = result;
+        this.currentReplies = {};
         this.currentOperation[1].resolve(result);
     }
 
@@ -261,10 +259,10 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
 
     private canReachConsensus(threshold: number): boolean {
         let potentialConsensus = true;
-        if (this.currentReplies.size > 0 && !this.enoughMatchingReplies(threshold)) {
+        const numReplies = Object.keys(this.currentReplies).length;
+        if (numReplies > 0 && !this.enoughMatchingReplies(threshold)) {
             const winner = this.winnerResult();
-            potentialConsensus =
-                threshold - winner[1] <= this.nReplicas - this.currentReplies.size;
+            potentialConsensus = winner[1] <= this.nReplicas - numReplies;
         }
         return potentialConsensus;
     }
@@ -273,18 +271,18 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
         let result: R = null;
         let max = 0;
 
-        const replies = new Map<string, [number, R]>();
-        for (const r of this.currentReplies.values()) {
+        const replies: Record<string, [number, R]> = {};
+        for (const r of Object.values(this.currentReplies)) {
             const hash = hashObject(r);
-            if (replies.has(hash)) {
-                const replyCount = replies.get(hash);
-                replies.set(hash, [replyCount[0] + 1, replyCount[1]]);
+            if (hash in replies) {
+                const replyCount = replies[hash];
+                replies[hash] = [replyCount[0] + 1, replyCount[1]];
             } else {
-                replies.set(hash, [1, r]);
+                replies[hash] = [1, r];
             }
         }
 
-        for (const r of replies.values()) {
+        for (const r of Object.values(replies)) {
             if (r[0] > max) {
                 result = r[1];
                 max = r[0];
@@ -295,7 +293,7 @@ export class TrebizondClient<Op extends Operation, R extends Result> {
     }
 
     private dispatchServerMessage(signedMsg: SignedObject<Message>, from: number) {
-        const sourceKey = this.serversTopology.get(from)[1];
+        const sourceKey = this.serversTopology[from][1];
         if (from === signedMsg.value.from
                 && checkObjectSignature(signedMsg, sourceKey)) {
             const msg = signedMsg.value;

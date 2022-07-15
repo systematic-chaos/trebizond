@@ -10,12 +10,10 @@
  * redis-state-machine/redisCommand.ts
  */
 
-import { Operation,
-         Result } from '../trebizond-common/datatypes';
+import Redis from 'ioredis';
+import { Operation } from '../trebizond-common/datatypes';
 import { StateMachine } from '../state-machine-connector/command';
 import { RedisMessageValidator } from './redisMessageValidator';
-import { Deferred as QPromise } from '../trebizond-common/deferred';
-import * as Redis from 'ioredis';
 
 interface RedisCommand {
     key: string;
@@ -23,13 +21,12 @@ interface RedisCommand {
     value: number;
 }
 
-export class RedisOperation extends Operation implements RedisCommand {
+class RedisOperation implements Operation, RedisCommand {
     key: string;
     operator: RedisOperator;
     value: number;
 
     constructor(key: string, operator: RedisOperator, value: number) {
-        super();
         this.key = key;
         this.operator = operator;
         this.value = value;
@@ -40,19 +37,18 @@ export class RedisOperation extends Operation implements RedisCommand {
     }
 }
 
-export class RedisResult extends Result implements RedisCommand {
+class RedisResult implements RedisCommand {
     key: string;
     operator: RedisOperator = RedisOperator.assign;
     value: number;
 
     constructor(key: string, value: number) {
-        super();
         this.key = key;
         this.value = value;
     }
 }
 
-export enum RedisOperator {
+enum RedisOperator {
     assign = '=',
     add = '+',
     substract = '-',
@@ -61,7 +57,7 @@ export enum RedisOperator {
     check = '<-'
 }
 
-export class RedisStateMachine extends StateMachine<RedisOperation, RedisResult> {
+class RedisStateMachine extends StateMachine<RedisOperation, RedisResult> {
 
     private redis: Redis.Redis;
 
@@ -73,7 +69,6 @@ export class RedisStateMachine extends StateMachine<RedisOperation, RedisResult>
     }
 
     public async executeOperation(op: RedisOperation): Promise<RedisResult> {
-        const p = new QPromise<RedisResult>();
         let newValue: number;
         if (op.operator === RedisOperator.assign) {
             newValue = op.value;
@@ -101,37 +96,30 @@ export class RedisStateMachine extends StateMachine<RedisOperation, RedisResult>
             console.log('Operation committed: ' + op.key + op.operator + op.value);
         }
 
-        this.redis.get(op.key).then((result) => {
-            newValue = Number(result);
-            console.log(op.key + ' -> ' + newValue);
-            p.resolve(new RedisResult(op.key, newValue));
-        });
-        return p.promise;
+        newValue = Number(await this.redis.get(op.key));
+        console.log(op.key + '->' + newValue);
+        return new RedisResult(op.key, newValue);
     }
 
     public applyOperation(op: RedisOperation, callback: (result: RedisResult) => void): void {
         this.executeOperation(op).then(callback);
     }
 
-    public async getSnapshot(): Promise<Map<string, number>> {
-        const p = new QPromise<Map<string, number>>();
-        this.redis.hgetall('*', (err: Error|null, result: Record<string, string>) => {
-            if (err !== null && err !== undefined
-                && (result === null || result === undefined)) {
-                    p.reject(err);
-            } else {
-                const hash = new Map<string, number>();
-                for (const key in result) {
-                    hash.set(key, Number(result[key]));
+    public getSnapshot(): Promise<Record<string, number>> {
+        return new Promise<Record<string, number>>((resolve, reject) => {
+            this.redis.hgetall('*', (err, result) => {
+                if (result && !err) {
+                    resolve(Object.fromEntries(Object.entries(result).map(
+                        ([k, v]) => [k, Number(v)])));
+                } else {
+                    reject(err);
                 }
-                p.resolve(hash);
-            }
+            });
         });
-        return p.promise;
     }
 
-    public setSnapshot(snapshot: Map<string, number>): void {
-        this.redis.hmset('*', snapshot);
+    public setSnapshot(snapshot: Record<string, number>): Promise<void> {
+        return new Promise<void>(resolve => this.redis.hmset('*', snapshot, () => resolve()));
     }
 
     private setArgumentTransformer(): void {
@@ -143,15 +131,18 @@ export class RedisStateMachine extends StateMachine<RedisOperation, RedisResult>
             return args;
         });
 
-        Redis.Command.setReplyTransformer('hgetall', function(result: string[]) {
+        Redis.Command.setReplyTransformer('hgetall', function(result) {
             if (Array.isArray(result)) {
                 const obj: Record<string, string> = {};
                 for (let i = 0; i < result.length; i+=2) {
                     obj[result[i]] = result[i + 1];
                 }
                 return obj;
+            } else {
+                return result;
             }
-            return result;
         });
     }
 }
+
+export { RedisCommand, RedisOperator, RedisOperation, RedisResult, RedisStateMachine };

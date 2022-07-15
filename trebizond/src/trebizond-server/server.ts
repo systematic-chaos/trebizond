@@ -11,7 +11,6 @@
  */
 
 import { Operation,
-         Result,
          Message,
          OpMessage,
          LeadershipVote,
@@ -25,7 +24,8 @@ import { Operation,
          AtomicBroadcastMessageLog } from '../trebizond-common/datatypes';
 import { BlockChain,
          StateMachine } from '../state-machine-connector/command';
-import { ServerNetworkController, ServerDefinition } from './networkController';
+import { ServerNetworkController,
+         ServerDefinition } from './networkController';
 import { FailureDetector } from './failureDetector';
 import { SignedObject,
          hashObject,
@@ -42,7 +42,7 @@ import { SignedObject,
  * It is the type of the results sent back to the client by the server
  * replicas.
  */
-export abstract class BaseTrebizondServer<Op extends Operation, R extends Result> {
+abstract class BaseTrebizondServer<Op extends Operation, R> {
 
     // Server identity and cluster topology
     protected id: number;
@@ -56,68 +56,78 @@ export abstract class BaseTrebizondServer<Op extends Operation, R extends Result
     // block chain log
     protected log: BlockChain<Op, R>;
 
-    protected topologyPeers: Map<number, string>;
-    protected peerKeys: Map<number, string>;
-    protected clientKeys: Map<number, string>;
+    protected peersTopology: Record<number, ServerDefinition>;
+    protected clientKeys: Record<number, Buffer>;
 
     /**
      * Base constructor to be accessed by children classes,
      * since this class is abstract.
      * @param serverId Numeric identifier for this server.
-     * @param topologyPeers Endpoint distribution for the cluster topology.
-     *          Map containing the identifiers for the nodes in the cluster,
-     *          along with their numeric identifiers.
+     * @param peersTopology Endpoint distribution for the cluster topology.
+     *          Record object containing the identifiers for the nodes
+     *          in the cluster along with their numeric identifiers.
+     * @param clientKeys Identifiers of the authorized clients along with their
+     *          public keys.
      * @param externalEndpoint IP address and port onto which the server
      *          will attend client's requests.
+     * @param serverPrivateKey Private key of this server for signing messages
+     *          to be sent and decrypting messages received.
      * @param stateMachine State machine onto which the command operations
      *          will be executed. Potentially, a subclass inheriting the
      *          behavior provided by the base StateMachine class.
      */
-    constructor(serverId: number, topologyPeers: Map<number, string>,
-            peerKeys: Map<number, string>, clientKeys: Map<number, string>,
-            externalEndpoint: string, serverPrivateKey: string,
-            stateMachine: StateMachine<Op, R>) {
+    public constructor(serverId: number, peersTopology: Record<number, ServerDefinition>,
+            clientKeys: Record<number, Buffer>, externalEndpoint: string,
+            serverPrivateKey: string, stateMachine: StateMachine<Op, R>) {
         this.id = serverId;
+        this.peersTopology = peersTopology;
+        this.nReplicas = Object.keys(peersTopology).length;
         this.externalEndpoint = externalEndpoint;
-        this.internalEndpoint = topologyPeers.get(serverId);
+        this.internalEndpoint = peersTopology[serverId].endpoint;
         this.privateKey = serverPrivateKey;
-        this.nReplicas = topologyPeers.size;
-        this.stateMachine = stateMachine;
-        this.topologyPeers = topologyPeers;
-        this.peerKeys = peerKeys;
         this.clientKeys = clientKeys;
+        this.stateMachine = stateMachine;
 
         this.log = new BlockChain();
 
         // Initialize the networking layer beneath
-        this.networkConnection = new ServerNetworkController(
-            this.id, topologyPeers, peerKeys, clientKeys, this.externalEndpoint,
+        this.networkConnection = new ServerNetworkController(serverId,
+            peersTopology, externalEndpoint, serverPrivateKey, clientKeys,
             this.dispatchPeerMessage.bind(this),
             this.dispatchClientOpRequest.bind(this));
     }
 
-    getId(): number {
+    protected getId(): number {
         return this.id;
     }
 
-    getNReplicas(): number {
+    protected getNReplicas(): number {
         return this.nReplicas;
     }
 
-    getExposedEndpoint(): string {
+    protected getExposedEndpoint(): string {
         return this.externalEndpoint;
     }
 
+    protected getInternalEndpoint(): string {
+        return this.internalEndpoint;
+    }
+
+    /**
+     * Starts the consensus algorithm on this server
+     */
+    public abstract launch(): void;
+
     /**
      * Manages the receival of an operation request from a client
-     * @param command The command to be managed and applied to the replicated
+     * @param operation The command to be managed and applied to the replicated
      *                  state machine by the servers cluster
      */
     public abstract dispatchClientOpRequest(operation: SignedObject<OpMessage<Op>>): void;
 
     /**
      * Reply to a client upon a previously submitted operation
-     * @param operationReply The result message to be sent back to the client
+     * @param reply The result message to be sent back to the client
      */
     public replyClientOperation(reply: Message): void {
         this.networkConnection.replyClientOperation(reply);
@@ -172,34 +182,35 @@ export abstract class BaseTrebizondServer<Op extends Operation, R extends Result
  * In addition of the functionality provided by its parent class, it also
  * implements the atomic broadcast and successive leader rotation algorithms.
  */
-export class TrebizondServer<Op extends Operation, R extends Result> extends BaseTrebizondServer<Op, R> {
+class TrebizondServer<Op extends Operation, R extends object> extends BaseTrebizondServer<Op, R> {
 
     private currentLeaderId = 0;
     private currentStage = 0;
-    private votesRegistry = new Map<number, Map<number, SignedObject<LeadershipVote>>>();
+    private votesRegistry: Record<number, Record<number, SignedObject<LeadershipVote>>> = {};
 
-    private clientLastOp = new Map<number, TrebizondResult<R>>();
+    private clientLastOp: Record<number, TrebizondResult<R>> = {};
 
-    private messagesLog: Map<string, AtomicBroadcastMessageLog<Op, R>>;
+    private messagesLog: Record<string, AtomicBroadcastMessageLog<Op, R>> = {};
 
     /**
      * @inheritDoc
      */
-    constructor(serverId: number, topologyPeers: Map<number, string>,
-            peerKeys: Map<number, string>, clientKeys: Map<number, string>,
-            externalEndpoint: string, serverPrivateKey: string,
-            stateMachine: StateMachine<Op, R>) {
-        super(serverId, topologyPeers, peerKeys, clientKeys, externalEndpoint,
+    constructor(serverId: number, peersTopology: Record<number, ServerDefinition>,
+            clientKeys: Record<number, Buffer>, externalEndpoint: string,
+            serverPrivateKey: string, stateMachine: StateMachine<Op, R>) {
+        super(serverId, peersTopology, clientKeys, externalEndpoint,
             serverPrivateKey, stateMachine);
-        this.currentLeaderId = [...topologyPeers.keys()].sort()[0];
+        this.currentLeaderId = Object.keys(peersTopology).map(Number).sort()[0];
 
         // Initialize a failure detector, passing the newly created network controller,
         // so that it will be binded as a message interceptor
+        const peerKeys = Object.fromEntries(Object.entries(this.peersTopology).map(
+            ([id, peer]) => [id, peer.publicKey]));
         new FailureDetector<Op>(serverId, peerKeys,
             this.networkConnection, stateMachine.getMessageValidator());
+    }
 
-        this.messagesLog = new Map<string, AtomicBroadcastMessageLog<Op, R>>();
-
+    public launch(): void {
         this.resetTimeout(this.LEADER_TIMEOUT * 2);
     }
 
@@ -242,7 +253,7 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
 
             // If operation request identifier matches that of the last operation
             // accepted for the same client, return the result stored beforehand
-            const lastOp = this.clientLastOp.get(operation.value.from);
+            const lastOp = this.clientLastOp[operation.value.from];
             if (lastOp && lastOp.opUuid === op.uuid) {
                 this.replyClientOperation({
                     type: 'SingleReply',
@@ -313,7 +324,7 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
         // Verify votes authenticity
         if (leadership.leader.vote === leadership.from
                 && leadership.leader.epoque >= this.currentStage
-                && leadership.votes.size >= this.upperBoundThreshold()) {
+                && Object.keys(leadership.votes).length >= this.upperBoundThreshold()) {
             const vote: LeadershipVote = {
                 type: 'LeadershipVote',
                 vote: leadership.leader.vote,
@@ -321,11 +332,12 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
                 from: leadership.from
             };
             let nVotes = 0;
-            leadership.votes.forEach((value: Uint8Array, key: number) => {
+            Object.entries(leadership.votes).forEach(([k, v]) => {
+                const key = Number(k);
                 vote.from = key;
                 const voteHash = hashObject(leadership.leader);
-                const sourceKey = this.peerKeys.get(key);
-                if (sourceKey && decryptText(value, sourceKey) === voteHash) {
+                const sourceKey = this.peersTopology[key].publicKey;
+                if (sourceKey && decryptText(v, sourceKey.toString('utf8')) === voteHash) {
                     nVotes++;
                 }
             });
@@ -335,7 +347,7 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
              * the current one. Current leader and stage identifiers are updated.
              * Otherwise, the leadership confirmation message is discarded.
              */
-            if (nVotes === leadership.votes.size) {
+            if (nVotes === Object.keys(leadership.votes).length) {
                 this.currentLeaderId = leadership.leader.vote;
                 this.currentStage = leadership.leader.epoque;
             }
@@ -356,12 +368,12 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
         const vote = signedVote.value;
         if (vote.vote === this.id
                 && vote.epoque >= this.currentStage
-                && !(this.votesRegistry.has(vote.epoque)
-                    && this.votesRegistry.get(vote.epoque).has(vote.from))) {
-            if (!this.votesRegistry.has(vote.epoque)) {
-                this.votesRegistry.set(vote.epoque, new Map<number, SignedObject<LeadershipVote>>());
+                && !(vote.epoque in this.votesRegistry
+                    && vote.from in this.votesRegistry[vote.epoque])) {
+            if (!(vote.epoque in this.votesRegistry)) {
+                this.votesRegistry[vote.epoque] = {};
             }
-            this.votesRegistry.get(vote.epoque).set(vote.from, signedVote);
+            this.votesRegistry[vote.epoque][vote.from] = signedVote;
 
             /**
              * If the number of votes needed for this replica to proclame itself the leader
@@ -369,11 +381,14 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
              * leader and stage identifers are updated and the votes gathered are sent as an
              * evidence to the other replicas.
              */
-            if (this.votesRegistry.get(vote.epoque).size >= this.upperBoundThreshold()) {
-                const votes = new Map<number, Uint8Array>();
-                this.votesRegistry.get(vote.epoque).forEach((value, key) => {
-                    votes.set(key, value.signature);
+            if (Object.keys(this.votesRegistry[vote.epoque]).length >= this.upperBoundThreshold()) {
+                const votes: Record<number, Uint8Array> = {};
+                Object.entries(this.votesRegistry[vote.epoque]).forEach(([key, value]) => {
+                    votes[Number(key)] = value.signature;
                 });
+                /*this.votesRegistry.get(vote.epoque).forEach((value, key) => {
+                    votes.set(key, value.signature);
+                });*/
                 const leadershipConfirmation: LeaderConfirmation = {
                     type: 'LeaderConfirmation',
                     leader: {
@@ -402,21 +417,19 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
          * Store this message in case no previous Init message existed
          * for the same operation and replica
          */
-        if (this.messagesLog.has(opId)) {
-            const init = this.messagesLog.get(opId).init;
-            if (!init.has(initMsg.from)) {
-                init.set(initMsg.from, initMsg);
+        if (opId in this.messagesLog) {
+            const init = this.messagesLog[opId].init;
+            if (!(initMsg.from in init)) {
+                init[initMsg.from] = initMsg;
             }
         } else {
-            const opLog: AtomicBroadcastMessageLog<Op, R> = {
-                init:  new Map<number, Init<Op>>(),
-                echo:  new Map<number, Echo<Op>>(),
-                ready: new Map<number, Ready<Op>>(),
-                accepted: new Array<string>(),
-                replies:  new Map<number, SingleReply<R>>()
+            this.messagesLog[opId] = {
+                init: { [initMsg.from]: initMsg },
+                echo:  {},
+                ready: {},
+                accepted: [],
+                replies:  {}
             };
-            opLog.init.set(initMsg.from, initMsg);
-            this.messagesLog.set(opId, opLog);
         }
 
         this.checkOperationAtomicBroadcastPhase1(opId);
@@ -434,21 +447,19 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
          * Store this message in case no previous Echo message existed
          * for the same operation and replica
          */
-        if (this.messagesLog.has(opId)) {
-            const echo = this.messagesLog.get(opId).echo;
-            if (!echo.has(echoMsg.from)) {
-                echo.set(echoMsg.from, echoMsg);
+        if (opId in this.messagesLog) {
+            const echo = this.messagesLog[opId].echo;
+            if (!(echoMsg.from in echo)) {
+                echo[echoMsg.from] = echoMsg;
             }
         } else {
-            const opLog: AtomicBroadcastMessageLog<Op, R> = {
-                init:  new Map<number, Init<Op>>(),
-                echo:  new Map<number, Echo<Op>>(),
-                ready: new Map<number, Ready<Op>>(),
-                accepted: new Array<string>(),
-                replies:  new Map<number, SingleReply<R>>()
+            this.messagesLog[opId] = {
+                init: {},
+                echo: { [echoMsg.from]: echoMsg },
+                ready: {},
+                accepted: [],
+                replies: {}
             };
-            opLog.echo.set(echoMsg.from, echoMsg);
-            this.messagesLog.set(opId, opLog);
         }
 
         this.checkOperationAtomicBroadcastPhase1(opId);
@@ -467,21 +478,19 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
          * Store this message in case no previous Ready message existed
          * for the same operation and replica
          */
-        if (this.messagesLog.has(opId)) {
-            const ready = this.messagesLog.get(opId).ready;
-            if (!ready.has(readyMsg.from)) {
-                ready.set(readyMsg.from, readyMsg);
+        if (opId in this.messagesLog) {
+            const ready = this.messagesLog[opId].ready;
+            if (!(readyMsg.from in ready)) {
+                ready[readyMsg.from] = readyMsg;
             }
         } else {
-            const opLog: AtomicBroadcastMessageLog<Op, R> = {
-                init:  new Map<number, Init<Op>>(),
-                echo:  new Map<number, Echo<Op>>(),
-                ready: new Map<number, Ready<Op>>(),
-                accepted: new Array<string>(),
-                replies:  new Map<number, SingleReply<R>>()
+            this.messagesLog[opId] = {
+                init: {},
+                echo: {},
+                ready: { [readyMsg.from]: readyMsg },
+                accepted: [],
+                replies: {}
             };
-            opLog.ready.set(readyMsg.from, readyMsg);
-            this.messagesLog.set(opId, opLog);
         }
 
         this.checkOperationAtomicBroadcast(opId);
@@ -504,12 +513,12 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
      * @param opId Tentative operation identifier
      */
     private checkOperationAtomicBroadcastPhase1(opId: string): boolean {
-        const messagesLogOpId = this.messagesLog.get(opId);
+        const messagesLogOpId = this.messagesLog[opId];
         if (messagesLogOpId
-                && !messagesLogOpId.echo.has(this.id)
-                && (messagesLogOpId.init.size >= 1
-                    || messagesLogOpId.echo.size >= (this.nReplicas + this.lowerBoundThreshold()) / 2
-                    || messagesLogOpId.ready.size !== this.lowerBoundThreshold() + 1)) {
+                && !(this.id in messagesLogOpId.echo)
+                && (Object.keys(messagesLogOpId.init).length >= 1
+                    || Object.keys(messagesLogOpId.echo).length >= (this.nReplicas + this.lowerBoundThreshold()) / 2
+                    || Object.keys(messagesLogOpId.ready).length !== this.lowerBoundThreshold() + 1)) {
             const op = this.getOperationFromLog(opId);
             if (op) {
                 const newEchoMsg: Echo<Op> = {
@@ -532,11 +541,11 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
      * @param opId Tentative operation identifier
      */
     private checkOperationAtomicBroadcastPhase2(opId: string): boolean {
-        const messagesLogOpId = this.messagesLog.get(opId);
+        const messagesLogOpId = this.messagesLog[opId];
         if (messagesLogOpId
-                && !messagesLogOpId.ready.has(this.id)
-                && (messagesLogOpId.echo.size >= (this.nReplicas + this.lowerBoundThreshold()) / 2
-                || messagesLogOpId.ready.size >= this.lowerBoundThreshold() + 1)) {
+                && !(this.id in messagesLogOpId.ready)
+                && (Object.keys(messagesLogOpId.echo).length >= (this.nReplicas + this.lowerBoundThreshold()) / 2
+                    || Object.keys(messagesLogOpId.ready).length >= this.lowerBoundThreshold() + 1)) {
             const op = this.getOperationFromLog(opId);
             if (op) {
                 const newReadyMsg: Ready<Op> = {
@@ -559,10 +568,10 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
      * @param opId Tentative operation identifier
      */
     private checkOperationAtomicBroadcastPhase3(opId: string): boolean {
-        const messagesLogOpId = this.messagesLog.get(opId);
+        const messagesLogOpId = this.messagesLog[opId];
         if (messagesLogOpId
                 && messagesLogOpId.accepted.indexOf(opId) < 0
-                && messagesLogOpId.ready.size >= 2 * this.lowerBoundThreshold() + 1) {
+                && Object.keys(messagesLogOpId.ready).length >= 2 * this.lowerBoundThreshold() + 1) {
             const op = this.getOperationFromLog(opId);
 
             /*
@@ -571,13 +580,13 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
             */
             if (op) {
                 const recipient = op.value.operation.broadcast ? op.value.from : this.currentLeaderId;
-                this.messagesLog.get(opId).accepted.push(opId);
+                this.messagesLog[opId].accepted.push(opId);
                 this.stateMachine.executeOperation(op.value.operation.operation).then((result: R) => {
                     const trebizondResult: TrebizondResult<R> = {
                         result,
                         opUuid: op.value.operation.uuid
                     };
-                    this.clientLastOp.set(op.value.from, trebizondResult);
+                    this.clientLastOp[op.value.from] = trebizondResult;
                     this.log.appendNextBlock(op.value.operation.operation, result, this.privateKey);
                     this.sendUnicast({
                                 type: 'SingleReply',
@@ -600,22 +609,22 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
     private receiveSingleReply(singleReplyMsg: SingleReply<R>): void {
         let opLog: AtomicBroadcastMessageLog<Op, R>;
         const opId = singleReplyMsg.result.value.opUuid;
-        if (this.messagesLog.has(opId)) {
-            opLog = this.messagesLog.get(opId);
+        if (opId in this.messagesLog) {
+            opLog = this.messagesLog[opId];
         } else {
-             opLog = {
-                init: new Map<number, Init<Op>>(),
-                echo: new Map<number, Echo<Op>>(),
-                ready: new Map<number, Ready<Op>>(),
-                accepted: new Array<string>(),
-                replies: new Map<number, SingleReply<R>>()
+            opLog = {
+                init: {},
+                echo: {},
+                ready: {},
+                accepted: [],
+                replies: {}
             };
-            this.messagesLog.set(opId, opLog);
+            this.messagesLog[opId] = opLog;
         }
 
         // Store signed single reply message just received
         if (!this.instanceofCollectiveReply(opLog.replies)) {
-            opLog.replies.set(singleReplyMsg.from, singleReplyMsg);
+            opLog.replies[singleReplyMsg.from] = singleReplyMsg;
 
             /*
              * Check whether enough matching replies for an already accepted operation
@@ -632,13 +641,13 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
      * @param opId Tentative operation identifier
      */
     private checkSingleRepliesForCollectiveReply(opId: string): boolean {
-        const messagesLogOpId = this.messagesLog.get(opId);
+        const messagesLogOpId = this.messagesLog[opId];
         if (messagesLogOpId
                 && !this.instanceofCollectiveReply(messagesLogOpId.replies)) {
-            const singleReplies = this.messagesLog.get(opId).replies as Map<number, SingleReply<R>>;
+            const singleReplies = this.messagesLog[opId].replies as Record<number, SingleReply<R>>;
             const threshold = this.upperBoundThreshold();
 
-            if (singleReplies.size >= threshold
+            if (Object.keys(singleReplies).length >= threshold
                     && this.enoughMatchingReplies(singleReplies, threshold)) {
                 const collectiveReply = this.composeCollectiveReply(opId, singleReplies);
                 messagesLogOpId.replies = collectiveReply;
@@ -651,42 +660,42 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
 
     private getOperationFromLog(opId: string): SignedObject<OpMessage<Op>> {
         let op: SignedObject<OpMessage<Op>>;
-        const messagesLogOpId = this.messagesLog.get(opId);
-        if (messagesLogOpId.init.size) {
-            op = Array.from(messagesLogOpId.init)[0][1].operation;
+        const messagesLogOpId = this.messagesLog[opId];
+        if (Object.keys(messagesLogOpId.init).length) {
+            op = Object.values(messagesLogOpId.init)[0].operation;
         } else {
-            if (messagesLogOpId.echo.size) {
-                op = Array.from(messagesLogOpId.echo)[0][1].operation;
+            if (Object.keys(messagesLogOpId.echo).length) {
+                op = Object.values(messagesLogOpId.echo)[0].operation;
             } else {
-                op = messagesLogOpId.ready.size ?
-                    Array.from(messagesLogOpId.ready)[0][1].operation : null;
+                op = Object.keys(messagesLogOpId.ready).length ?
+                    Object.values(messagesLogOpId.ready)[0].operation : null;
             }
         }
         return op;
     }
 
-    private enoughMatchingReplies(singleReplies: Map<number, SingleReply<R>>,
+    private enoughMatchingReplies(singleReplies: Record<number, SingleReply<R>>,
             threshold: number): R {
         const winner = this.winnerResult(singleReplies);
         return winner !== null && winner[1] >= threshold ? winner[0] : null;
     }
 
-    private winnerResult(singleReplies: Map<number, SingleReply<R>>): [R, number] {
+    private winnerResult(singleReplies: Record<number, SingleReply<R>>): [R, number] {
         let result: R;
         let max = 0;
 
-        const auxReplies = new Map<string, [number, R]>();
-        for (const r of singleReplies.values()) {
+        const auxReplies: Record<string, [number, R]> = {};
+        for (const r of Object.values(singleReplies)) {
             const hash = hashObject(r.result.value.result);
-            if (auxReplies.has(hash)) {
-                const replyCount = auxReplies.get(hash);
-                auxReplies.set(hash, [replyCount[0] + 1, replyCount[1]]);
+            if (hash in auxReplies) {
+                const replyCount = auxReplies[hash];
+                auxReplies[hash] = [replyCount[0] + 1, replyCount[1]];
             } else {
-                auxReplies.set(hash, [1, r.result.value.result]);
+                auxReplies[hash] = [1, r.result.value.result];
             }
         }
 
-        for (const r of auxReplies.values()) {
+        for (const r of Object.values(auxReplies)) {
             if (r[0] > max) {
                 result = r[1];
                 max = r[0];
@@ -696,16 +705,17 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
         return result !== null ? [result, max] : null;
     }
 
-    private composeCollectiveReply(opId: string, singleReplies: Map<number, SingleReply<R>>):
+    private composeCollectiveReply(opId: string, singleReplies: Record<number, SingleReply<R>>):
             CollectiveReply<R> {
         const result = this.winnerResult(singleReplies);
         const resultHash = hashObject(result[0]);
 
-        const resultAcknowledgments = new Map<number, Uint8Array>();
-        for (const replica of singleReplies.keys()) {
-            const reply = singleReplies.get(replica);
+        const resultAcknowledgments: Record<number, Uint8Array> = {};
+        for (const r of Object.keys(singleReplies)) {
+            const replica = Number(r);
+            const reply = singleReplies[replica];
             if (hashObject(reply.result.value.result) === resultHash) {
-                resultAcknowledgments.set(replica, reply.result.signature);
+                resultAcknowledgments[replica] = reply.result.signature;
             }
         }
 
@@ -730,17 +740,19 @@ export class TrebizondServer<Op extends Operation, R extends Result> extends Bas
  * Extends the functionality provided by the Trebizond complete server,
  * enabling its manipulation for the sake of testing and debugging.
  */
-export class OperableTrebizondServer<Op extends Operation, R extends Result> extends TrebizondServer<Op, R> {
+class OperableTrebizondServer<Op extends Operation, R extends object> extends TrebizondServer<Op, R> {
 
     stopped = false;
 
-    constructor(serverId: number, topologyPeers: Map<number, string>,
-            peerKeys: Map<number, string>, clientKeys: Map<number, string>,
-            externalEndpoint: string, serverPrivateKey: string,
-            stateMachine: StateMachine<Op, R>) {
-        super(serverId, topologyPeers, peerKeys, clientKeys, externalEndpoint,
+    constructor(serverId: number, peersTopology: Record<number, ServerDefinition>,
+            clientKeys: Record<number, Buffer>, externalEndpoint: string,
+            serverPrivateKey: string, stateMachine: StateMachine<Op, R>) {
+        super(serverId, peersTopology, clientKeys, externalEndpoint,
             serverPrivateKey, stateMachine);
     }
+
+    // TODO AUGMENT STOP FUNCTIONALITY
 }
 
-export { ServerDefinition as PeerDefinition };
+export { TrebizondServer, OperableTrebizondServer,
+    ServerDefinition as PeerDefinition };

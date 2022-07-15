@@ -22,7 +22,7 @@ import { MessageValidator } from '../state-machine-connector/messageValidator';
 export class FailureDetector<Op extends Operation> {
 
     private id: number;
-    private peerKeys: Map<number, string>;
+    private peerKeys: Record<number, Buffer>;
     private networkController: ServerNetworkController;
     private validator: MessageValidator<Op>;
     private suspectNodes: Array<number>;
@@ -30,7 +30,7 @@ export class FailureDetector<Op extends Operation> {
     private onMessageRedirect!: (message: SignedObject<Message>) => void;
     private onRequestRedirect!: (request: SignedObject<OpMessage<Op>>) => void;
 
-    constructor(replicaId: number, peersPublicKeys: Map<number, string>,
+    constructor(replicaId: number, peersPublicKeys: Record<number, Buffer>,
             networkController: ServerNetworkController,
             validator: MessageValidator<Op>) {
         this.id = replicaId;
@@ -50,8 +50,8 @@ export class FailureDetector<Op extends Operation> {
     }
 
     protected authenticationValidation(message: SignedObject<Message>): boolean {
-        return this.peerKeys.has(message.value.from) ?
-            checkObjectSignature(message, this.peerKeys.get(message.value.from)) : false;
+        return message.value.from in this.peerKeys ?
+            checkObjectSignature(message, this.peerKeys[message.value.from]) : false;
     }
 
     protected semanticValidation(message: Message): boolean {
@@ -128,6 +128,6 @@ export class FailureDetector<Op extends Operation> {
         }
 
         const innerOp = outerOp.operation;
-        return innerOp instanceof Operation;
+        return !!innerOp;
     }
 }
