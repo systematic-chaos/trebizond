@@ -10,6 +10,7 @@
  * trebizond-server/server.ts
  */
 
+import { clearTimeout } from 'timers';
 import { Operation,
          Message,
          OpMessage,
@@ -294,8 +295,8 @@ class TrebizondServer<Op extends Operation, R extends object> extends BaseTrebiz
 
     private readonly LEADER_TIMEOUT: number = 5000;
 
-    private resetTimeout(timeout = this.LEADER_TIMEOUT) {
-        setTimeout(this.leaderTimeout.bind(this), timeout);
+    protected resetTimeout(timeout = this.LEADER_TIMEOUT): NodeJS.Timeout {
+        return setTimeout(this.leaderTimeout.bind(this), timeout);
     }
 
     /**
@@ -742,7 +743,8 @@ class TrebizondServer<Op extends Operation, R extends object> extends BaseTrebiz
  */
 class OperableTrebizondServer<Op extends Operation, R extends object> extends TrebizondServer<Op, R> {
 
-    stopped = false;
+    private runningTimeout: NodeJS.Timeout;
+    private running = false;
 
     constructor(serverId: number, peersTopology: Record<number, ServerDefinition>,
             clientKeys: Record<number, Buffer>, externalEndpoint: string,
@@ -751,7 +753,25 @@ class OperableTrebizondServer<Op extends Operation, R extends object> extends Tr
             serverPrivateKey, stateMachine);
     }
 
-    // TODO AUGMENT STOP FUNCTIONALITY
+    public launch(): void {
+        super.launch();
+        this.running = true;
+    }
+
+    public stop(): void {
+        if (typeof(this.runningTimeout) !== 'undefined') {
+            clearTimeout(this.runningTimeout);
+        }
+        this.running = false;
+    }
+
+    public isServerRunning(): boolean {
+        return this.running;
+    }
+
+    protected resetTimeout(timeout: number): NodeJS.Timeout {
+        return this.runningTimeout = super.resetTimeout(timeout);
+    }
 }
 
 export { TrebizondServer, OperableTrebizondServer,
