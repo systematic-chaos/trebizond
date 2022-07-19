@@ -27,7 +27,7 @@ import * as zeromq from 'zeromq';
 
 export class TrebizondClient<Op extends Operation, R extends object> {
 
-    private clientId: number;
+    private clientId: number|string;
     private privateKey: string;
 
     // server id, [server endpoint, server public key]
@@ -48,10 +48,9 @@ export class TrebizondClient<Op extends Operation, R extends object> {
     protected static readonly TRANSPORT_PROTOCOL: string = 'tcp';
     protected static readonly PROTOCOL_PREFIX: string = TrebizondClient.TRANSPORT_PROTOCOL + '://';
 
-    constructor(client: [number, string],
+    constructor(client: [number|string, string],
             serversTopology: Record<number, [string, Buffer]>) {
-        this.clientId = client[0];
-        this.privateKey = client[1];
+        [this.clientId, this.privateKey] = client;
         this.serversTopology = serversTopology;
 
         this.cipher = new Cipher(this.privateKey);
@@ -224,8 +223,7 @@ export class TrebizondClient<Op extends Operation, R extends object> {
 
     private unicastOperationRequest(operation: TrebizondOperation<Op>): void {
         const currentServerEndpoint = this.serversTopology[this.currentLeaderId][0];
-        console.log('Sending operation to ' + this.currentLeaderId +
-        '(' + currentServerEndpoint + ')');
+        console.log(`Sending operation to ${this.currentLeaderId} (${currentServerEndpoint})`);
         console.log(JSON.stringify(operation.operation));
         const marshalledSignedOp = JSON.stringify(this.cipher.signObject(operation));
         this.requestSockets[this.currentLeaderId].send(marshalledSignedOp);
@@ -343,7 +341,7 @@ export class TrebizondClient<Op extends Operation, R extends object> {
 
     private randomizeCurrentLeader(nReplicas?: number): number {
         return this.currentLeaderId =
-            Math.floor(Math.random() * (nReplicas ? nReplicas : this.nReplicas));
+            Math.floor(Math.random() * (nReplicas || this.nReplicas)) + 1;
     }
 
     private writeOpConsensusThreshold(n: number = this.nReplicas): number {

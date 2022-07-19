@@ -23,9 +23,9 @@ if (process.argv.length < 4) {
 
 const clientConf = fs.readFileSync(process.argv[2], 'utf-8')
     .split('\t').filter(client => client.length);
-const clientId = parseInt(clientConf[0]);
+const clientId = clientConf[0];
 const clientPrivateKey = fs.readFileSync(clientConf[1], 'utf-8');
-const servers = fs.readFileSync(process.argv[2], 'utf-8')
+const servers = fs.readFileSync(process.argv[3], 'utf-8')
     .split('\n').filter(server => server.length);
 
 const serversConfig: Record<number, [string, Buffer]> = {};
@@ -35,61 +35,33 @@ servers.forEach((element) => {
     serversConfig[parseInt(serverConfig[0])] = [serverConfig[1], serverPublicKey];
 });
 
-const client = new TrebizondClient<RedisOperation, RedisResult>([clientId, clientPrivateKey], serversConfig);
+function main() {
+    const client = new TrebizondClient<RedisOperation, RedisResult>(
+        [clientId, clientPrivateKey], serversConfig);
+    const variables: Record<string, number> = {};
 
-let A = 0;
-let B = 0;
-
-for (;;) {
-    setTimeout(() => {
-        const nextOperation = generateRedisCommand();
-        client.sendCommand(nextOperation).then((opResult: RedisResult) => {
-            switch (opResult.key) {
-                case 'A':
-                    A = opResult.value;
-                    break;
-                case 'B':
-                    B = opResult.value;
-                    break;
-            }
-        });
-    }, ((Math.random() * 1000) % 1500) + 1500);
+    setInterval(async () => {
+            const nextOperation = generateRedisCommand(variables);
+            const opResult = await client.sendCommand(nextOperation);
+            console.log(`Value ${opResult.value} was committed to variable ${opResult.key}`);
+        }, ((Math.random() * 1000) % 1500) + 1500);
 }
 
-function generateRedisCommand(): RedisOperation {
-    let key: string;
-    let operator: RedisOperator;
+function generateRedisCommand(variables: Record<string, number>): RedisOperation {
+    const key = Math.round(Math.random()) ? 'A' : 'B';
     const value = Math.floor(Math.random() * 10000);
-    if (Math.round(Math.random())) {
-        key = 'A';
-        if (A) {
-            operator = Math.floor(Math.random() * 6) > 4 ? RedisOperator.assign : RedisOperator.add;
-        } else {
-            operator = RedisOperator.assign;
-        }
-        switch (operator) {
-            case RedisOperator.assign:
-                A = value;
-                break;
-            case RedisOperator.add:
-                A += value;
-                break;
-        }
-    } else {
-        key = 'B';
-        if (B) {
-            operator = Math.floor(Math.random() * 6) > 4 ? RedisOperator.assign : RedisOperator.add;
-        } else {
-            operator = RedisOperator.assign;
-        }
-        switch (operator) {
-            case RedisOperator.assign:
-                B = value;
-                break;
-            case RedisOperator.add:
-                B += value;
-                break;
-        }
+    const operator = key in variables && Math.floor(Math.random() * 6) > 4 ?
+        RedisOperator.assign : RedisOperator.add;
+
+    switch (operator) {
+        case RedisOperator.assign:
+            variables[key] = value;
+            break;
+        case RedisOperator.add:
+            variables[key] += value;
+            break;
     }
     return new RedisOperation(key, operator, value);
 }
+
+main();
