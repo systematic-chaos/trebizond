@@ -1,7 +1,7 @@
 version: '3'
 services:
   peer_1:
-    image: node:12-slim
+    image: node:12-bullseye
     container_name: trebizond_server_1
     command: node trebizond/dist/trebizond-server/trebizondRedisServer.js 1 eth0:6530 redis_1 keys/peer_1 endpoints/docker_endpoints.txt endpoints/clients.txt
     working_dir: /home/trebizond
@@ -14,7 +14,7 @@ services:
     links:
      - redis_1
   peer_2:
-    image: node:12-slim
+    image: node:12-bullseye
     container_name: trebizond_server_2
     command: node trebizond/dist/trebizond-server/trebizondRedisServer.js 2 eth0:6530 redis_2 keys/peer_2 endpoints/docker_endpoints.txt endpoints/clients.txt
     working_dir: /home/trebizond
@@ -27,7 +27,7 @@ services:
     links:
      - redis_2
   peer_3:
-    image: node:12-slim
+    image: node:12-bullseye
     container_name: trebizond_server_3
     command: node trebizond/dist/trebizond-server/trebizondRedisServer.js 3 eth0:6530 redis_3 keys/peer_3 endpoints/docker_endpoints.txt endpoints/clients.txt
     working_dir: /home/trebizond
@@ -40,7 +40,7 @@ services:
     links:
      - redis_3
   peer_4:
-    image: node:12-slim
+    image: node:12-bullseye
     container_name: trebizond_server_4
     command: node trebizond/dist/trebizond-server/trebizondRedisServer.js 4 eth0:6530 redis_4 keys/peer_4 endpoints/docker_endpoints.txt endpoints/clients.txt
     working_dir: /home/trebizond
@@ -53,7 +53,7 @@ services:
     links:
      - redis_4
   peer_5:
-    image: node:12-slim
+    image: node:12-bullseye
     container_name: trebizond_server_5
     command: node trebizond/dist/trebizond-server/trebizondRedisServer.js 5 eth0:6530 redis_5 keys/peer_5 endpoints/docker_endpoints.txt endpoints/clients.txt
     working_dir: /home/trebizond
@@ -66,7 +66,7 @@ services:
     links:
      - redis_5
   peer_6:
-    image: node:12-slim
+    image: node:12-bullseye
     container_name: trebizond_server_6
     command: node trebizond/dist/trebizond-server/trebizondRedisServer.js 6 eth0:6530 redis_6 keys/peer_6 endpoints/docker_endpoints.txt endpoints/clients.txt
     working_dir: /home/trebizond
@@ -79,7 +79,7 @@ services:
     links:
      - redis_6
   peer_7:
-    image: node:12-slim
+    image: node:12-bullseye
     container_name: trebizond_server_7
     command: node trebizond/dist/trebizond-server/trebizondRedisServer.js 7 eth0:6530 redis_7 keys/peer_7 endpoints/docker_endpoints.txt endpoints/clients.txt
     working_dir: /home/trebizond

@@ -202,7 +202,7 @@ class ServerNetworkController extends NetworkController {
         this.routerSocket.on('error', this.manageDeliveryError.bind(this));
         for (const peer of Object.values(peerTopology)) {
             this.routerSocket.connect(NetworkController.PROTOCOL_PREFIX + peer.endpoint);
-            console.log('Connected to endpoint ' + peer);
+            console.log('Connected to endpoint ' + peer.endpoint);
         }
 
         this.dealerSocket = zeromq.socket('dealer');
