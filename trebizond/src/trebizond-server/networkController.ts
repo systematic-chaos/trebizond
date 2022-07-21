@@ -19,6 +19,7 @@ import { checkObjectSignature,
          signObject,
          SignedObject } from '../trebizond-common/crypto';
 import { Deferred as QPromise } from '../trebizond-common/deferred';
+import { log } from '../trebizond-common/logger';
 import { uuidv4 } from '../trebizond-common/util';
 import { networkInterfaces } from 'os';
 import * as zeromq from 'zeromq';
@@ -34,7 +35,6 @@ abstract class NetworkController {
 
     /**
      * Sockets used for sending request messages to peer servers in the cluster.
-     * TODO MULTIPLE ROUTER SOCKETS?
      */
     protected routerSocket: zeromq.Socket;
 
@@ -202,7 +202,7 @@ class ServerNetworkController extends NetworkController {
         this.routerSocket.on('error', this.manageDeliveryError.bind(this));
         for (const peer of Object.values(peerTopology)) {
             this.routerSocket.connect(NetworkController.PROTOCOL_PREFIX + peer.endpoint);
-            console.log('Connected to endpoint ' + peer.endpoint);
+            log.info(`Connected to endpoint ${peer.endpoint}`);
         }
 
         this.dealerSocket = zeromq.socket('dealer');
@@ -212,8 +212,8 @@ class ServerNetworkController extends NetworkController {
 
         resolveHostnameToNetworkAddress(internalEndpoint).then((endpointAddress: string) => {
             const networkInterface: string = identifyEndpointInterface(endpointAddress);
-            console.log('Internal endpoint ' + internalEndpoint +
-                ' (' + endpointAddress + ') maps to network interface ' + networkInterface);
+            log.info(`Internal endpoint ${internalEndpoint} (${endpointAddress})`
+                + ` maps to network interface ${networkInterface}`);
             this.dealerSocket.bindSync(NetworkController.PROTOCOL_PREFIX + endpointAddress);
         });
     }
@@ -226,8 +226,8 @@ class ServerNetworkController extends NetworkController {
 
         resolveHostnameToNetworkAddress(externalEndpoint).then((endpointAddress: string) => {
             const networkInterface = identifyEndpointInterface(endpointAddress);
-            console.log('External endpoint ' + externalEndpoint +
-                ' (' + endpointAddress + ') maps to network interface ' + networkInterface);
+            log.info(`External endpoint ${externalEndpoint} (${endpointAddress})`
+                + ` maps to network interface ${networkInterface}`);
             this.replySocket.bind(NetworkController.PROTOCOL_PREFIX + endpointAddress);
         });
     }
@@ -236,9 +236,10 @@ class ServerNetworkController extends NetworkController {
      * @inheritDoc
      */
     public sendMessage(msg: Message, to: number): void {
-        console.log('Server ' + this.id + ' sending ' + msg.type + ' message to ' + to);
+        log.debug(`Server ${this.id} sending ${msg.type} message to ${to}`);
         const signed = signObject(msg, this.privateKey) as SignedObject<Message>;
         const marshalled = this.marshallMessage(signed, this.id, to);
+        // Prepend the identity of the receipt's dealer socket for properly routing the message
         marshalled.unshift(to.toString());
 
         this.routerSocket.send(marshalled);
@@ -268,7 +269,7 @@ class ServerNetworkController extends NetworkController {
      * @inheritDoc
      */
     public replyClientOperation(msg: Message): void {
-        console.log('Server ' + this.id + ' sending ' + msg.type + ' reply message to client');
+        log.debug(`Server ${this.id} sending ${msg.type} reply message to client`);
         const signed = signObject(msg, this.privateKey) as SignedObject<Message>;
         this.replySocket.send(JSON.stringify(signed));
     }
@@ -278,7 +279,8 @@ class ServerNetworkController extends NetworkController {
      */
     protected dispatchMessage(...args: string[]): void {
         const message: Envelope<Message> = this.unmarshallMessage(args);
-        console.log('Server ' + message.ids[message.ids.length - 1] + ': Received message of type ' + message.type + ' from ' + message.ids[0]);
+        log.debug(`Server ${message.ids[message.ids.length - 1]}: `
+            + `Received message of type ${message.type} from ${message.ids[0]}`);
 
         // Check message validity before dispatching it
         const sourceKey = this.peers[message.msg.value.from].publicKey;
@@ -301,7 +303,7 @@ class ServerNetworkController extends NetworkController {
      */
     protected dispatchOpRequest(...args: string[]): void {
         const message: SignedObject<OpMessage<Operation>> = JSON.parse(args.toString());
-        console.log('Server ' + this.id + ': Received operation request message from client ' + message.value.from);
+        log.debug(`Server ${this.id}: Received operation request message from client ${message.value.from}`);
 
         // Check message validity before dispatching it
         const sourceKey = this.clientKeys[message.value.from];
@@ -323,7 +325,8 @@ class ServerNetworkController extends NetworkController {
      */
     protected manageDeliveryError(...args: string[]): void {
         const message = this.unmarshallMessage(args);
-        console.log('Server ' + message.ids[0] + ': Failed to send message of type ' + message.type + ' to ' + message.ids[message.ids.length - 1]);
+        log.debug(`Server ${message.ids[0]}: Failed to send message of type`
+            + ` ${message.type} to ${message.ids[message.ids.length - 1]}`);
     }
 }
 
@@ -468,7 +471,7 @@ class SynchronousServerNetworkController extends ServerNetworkController
      * @inheritDoc
      */
     public sendMessageSync(req: Message, to: number, timeout?: number): QPromise<Envelope<Reply>> {
-        console.log('Server ' + this.id + ' sending ' + req.type + ' message to ' + to);
+        log.debug(`Server ${this.id} sending ${req.type} message to ${to}`);
         const signed = signObject(req, this.privateKey) as SignedObject<Message>;
         const marshalled = this.marshallMessage(signed, this.id, to);
         marshalled.unshift(to.toString());
@@ -511,7 +514,7 @@ class SynchronousServerNetworkController extends ServerNetworkController
      * @inheritDoc
      */
     public sendReply(msg: Reply, to: number): void {
-        console.log('Server ' + this.id + ' replies with ' + msg.type + ' message to ' + to);
+        log.debug(`Server ${this.id} replies with ${msg.type} message to ${to}`);
         const marshalled = this.marshallMessage(signObject(
             msg, this.privateKey) as SignedObject<Reply>, this.id, to, msg.serialUUID);
         marshalled.unshift(to.toString());
@@ -523,7 +526,8 @@ class SynchronousServerNetworkController extends ServerNetworkController
      */
     protected dispatchMessage(...args: string[]): void {
         const message = this.unmarshallMessage(args);
-        console.log('Server' + message.ids[message.ids.length - 1] + ': Received message of type ' + message.type + ' from ' + message.ids[0]);
+        log.debug(`Server ${message.ids[message.ids.length - 1]}: Received message of type`
+            + ` ${message.type} from ${message.ids[0]}`);
 
         // Check message validity before dispatching it
         const sourceKey = this.peers[message.msg.value.from].publicKey;
@@ -559,7 +563,8 @@ class SynchronousServerNetworkController extends ServerNetworkController
      */
     protected manageDeliveryError(...args: string[]): void {
         const message = this.unmarshallMessage(args);
-        console.log('Server ' + message.ids[0] + ': Failed to send message of type ' + message.type + ' to ' + message.ids[message.ids.length - 1]);
+        log.debug(`Server ${message.ids[0]}: Failed to send message of type ${message.type}`
+            + ` to ${message.ids[message.ids.length - 1]}`);
         const p = this.pendingReplies[message.serialUUID];
         if (p && p.isPending()) {
             p.reject('Delivery error');

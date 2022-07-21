@@ -14,10 +14,11 @@ import { RedisOperation,
          RedisOperator,
          RedisResult } from '../redis-state-machine/redisCommand';
 import { TrebizondClient } from './trebizondClient';
+import { log } from '../trebizond-common/logger';
 import * as fs from 'fs';
 
 if (process.argv.length < 4) {
-    console.error('usage: nodejs trebizondRedisClient.js <clientFile> <serversFile>');
+    log.error('usage: nodejs trebizondRedisClient.js <clientFile> <serversFile>');
     process.exit(1);
 }
 
@@ -43,7 +44,7 @@ function main() {
     setInterval(async () => {
             const nextOperation = generateRedisCommand(variables);
             const opResult = await client.sendCommand(nextOperation);
-            console.log(`Value ${opResult.value} was committed to variable ${opResult.key}`);
+            log.info(`Value ${opResult.value} was committed to variable ${opResult.key}`);
         }, ((Math.random() * 1000) % 1500) + 1500);
 }
 

@@ -14,6 +14,7 @@ import Redis from 'ioredis';
 import { Operation } from '../trebizond-common/datatypes';
 import { StateMachine } from '../state-machine-connector/command';
 import { RedisMessageValidator } from './redisMessageValidator';
+import { log } from '../trebizond-common/logger';
 
 interface RedisCommand {
     key: string;
@@ -93,11 +94,11 @@ class RedisStateMachine extends StateMachine<RedisOperation, RedisResult> {
         }
         if (RedisOperator.check !== op.operator) {
             this.redis.set(op.key, newValue);
-            console.log('Operation committed: ' + op.key + op.operator + op.value);
+            log.info(`Operation committed: ${op.key} ${op.operator} ${op.value}`);
         }
 
         newValue = Number(await this.redis.get(op.key));
-        console.log(op.key + '->' + newValue);
+        log.info(`${op.key} -> ${newValue}`);
         return new RedisResult(op.key, newValue);
     }
 

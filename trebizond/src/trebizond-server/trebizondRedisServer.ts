@@ -22,7 +22,7 @@ import { sleep } from '../trebizond-common/util';
 
 
 if (process.argv.length < 8) {
-    console.error('usage: nodejs trebizondRedisServer.js <serverId> <exposedEndpoint> <redisEndpoint> <serverPrivateKeyFile> <serversFile> <clientsFile>');
+    log.error('usage: nodejs trebizondRedisServer.js <serverId> <exposedEndpoint> <redisEndpoint> <serverPrivateKeyFile> <serversFile> <clientsFile>');
     process.exit(1);
 }
 
@@ -52,7 +52,7 @@ readFileSync(clientsFile, 'utf8').split('\n').filter(client => client.length > 0
     });
 
 if (id - 1 >= clusterSize || id - 1 < 0) {
-    console.error('Server index is out of the input endpoint addresses bounds.');
+    log.error('Server index is out of the input endpoint addresses bounds.');
     process.exit(2);
 }
 

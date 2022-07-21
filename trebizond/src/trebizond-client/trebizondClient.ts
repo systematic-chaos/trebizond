@@ -23,6 +23,7 @@ import { Message,
          SingleReply,
          Operation,
          TrebizondOperation } from '../trebizond-common/datatypes';
+import { log } from '../trebizond-common/logger';
 import * as zeromq from 'zeromq';
 
 export class TrebizondClient<Op extends Operation, R extends object> {
@@ -71,16 +72,14 @@ export class TrebizondClient<Op extends Operation, R extends object> {
                 const serverSocket = zeromq.createSocket('req');
                 try {
                     serverSocket.connect(serverEndpoint);
-                    console.log('Connected to cluster endpoint ' + serverId +
-                        ' (' + serverEndpoint + ')');
+                    log.info(`Connected to cluster endpoint ${serverId} (${serverEndpoint})`);
 
                     serverSocket.on('message', msg => {
                         this.dispatchServerMessage(JSON.parse(msg), serverId);
                     });
                     requestSockets[serverId] = serverSocket;
                 } catch(ex) {
-                    console.error('Failed to connect to cluster endpoint ' +
-                        serverId + ' (' + serverEndpoint + ')');
+                    log.error(`Failed to connect to cluster endpoint ${serverId} (${serverEndpoint})`);
                 }
             }
         });
@@ -223,16 +222,16 @@ export class TrebizondClient<Op extends Operation, R extends object> {
 
     private unicastOperationRequest(operation: TrebizondOperation<Op>): void {
         const currentServerEndpoint = this.serversTopology[this.currentLeaderId][0];
-        console.log(`Sending operation to ${this.currentLeaderId} (${currentServerEndpoint})`);
-        console.log(JSON.stringify(operation.operation));
+        log.info(`Sending operation to ${this.currentLeaderId} (${currentServerEndpoint})`);
+        log.info(JSON.stringify(operation.operation));
         const marshalledSignedOp = JSON.stringify(this.cipher.signObject(operation));
         this.requestSockets[this.currentLeaderId].send(marshalledSignedOp);
     }
 
     private broadcastOperationRequest(operation: TrebizondOperation<Op>): void {
         operation.broadcast = true;
-        console.log('Broadcasting operation to all replicas');
-        console.log(JSON.stringify(operation.operation));
+        log.info('Broadcasting operation to all replicas');
+        log.info(JSON.stringify(operation.operation));
         const marshalledSignedOp = JSON.stringify(this.cipher.signObject(operation));
         Object.values(this.requestSockets).forEach(socket => {
             socket.send(marshalledSignedOp);
